@@ -40,28 +40,35 @@ Regras:
 - Não inclua valores monetários, apenas itens e quantidades
 - Retorne SOMENTE o JSON, sem explicações`;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType, data: base64Image } },
-          ],
-        }],
-        generationConfig: { temperature: 0.1 },
-      }),
-    }
-  );
+  // Try models in order until one works
+  const models = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash'];
+  let response, lastError;
+
+  for (const model of models) {
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType, data: base64Image } },
+            ],
+          }],
+          generationConfig: { temperature: 0.1 },
+        }),
+      }
+    );
+    if (response.ok) break;
+    const errBody = await response.json().catch(() => ({}));
+    lastError = errBody.error?.message || `Erro ${response.status}`;
+    if (response.status === 400 || response.status === 403) break; // bad key, no point retrying
+  }
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    if (response.status === 400) throw new Error('Chave de API inválida. Verifique e tente novamente.');
-    if (response.status === 429) throw new Error('Limite de uso atingido. Aguarde alguns segundos.');
-    throw new Error(err.error?.message || `Erro ${response.status}`);
+    throw new Error(`Google API: ${lastError}`);
   }
 
   const data = await response.json();
