@@ -43,9 +43,13 @@ function DetailModal({ outing, purchases, onClose }) {
           </div>
           <div className="flex items-center gap-2">
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              outing.status === 'active' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+              outing.status === 'active'
+                ? 'bg-yellow-100 text-yellow-800'
+                : outing.pendingItems?.length > 0
+                ? 'bg-red-100 text-red-800'
+                : 'bg-green-100 text-green-800'
             }`}>
-              {outing.status === 'active' ? 'Em campo' : 'Encerrado'}
+              {outing.status === 'active' ? 'Em campo' : outing.pendingItems?.length > 0 ? 'Encerrado c/ pendência' : 'Encerrado'}
             </span>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
           </div>
@@ -79,21 +83,21 @@ function DetailModal({ outing, purchases, onClose }) {
             </div>
 
             {/* Pendências */}
-            {outing.status === 'closed' && !allReturned && (
+            {outing.status === 'closed' && outing.pendingItems?.length > 0 && (
               <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-sm font-semibold text-red-800 mb-2">⚠ Itens não devolvidos</p>
-                <ul className="space-y-1">
-                  {missingItems.map((i) => (
-                    <li key={i.equipmentId} className="flex justify-between text-sm text-red-700">
-                      <span>{i.name}</span>
-                      <span className="font-semibold">{i.taken - i.returned} un. faltando</span>
+                <p className="text-sm font-semibold text-red-800 mb-2">⚠ Itens não devolvidos — pendência registrada</p>
+                <ul className="space-y-1.5">
+                  {outing.pendingItems.map((i) => (
+                    <li key={i.equipmentId} className="flex justify-between text-sm bg-red-100 rounded-lg px-3 py-1.5">
+                      <span className="text-red-900 font-medium">{i.name}</span>
+                      <span className="text-red-800 font-bold">{i.missing} un. não devolvida(s)</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {outing.status === 'closed' && allReturned && (
+            {outing.status === 'closed' && !outing.pendingItems?.length && (
               <div className="mt-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
                 <p className="text-sm font-semibold text-green-700">✓ Todos os itens foram devolvidos</p>
               </div>
@@ -241,9 +245,13 @@ export default function Historico() {
                   )}
                 </div>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${
-                  outing.status === 'active' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                  outing.status === 'active'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : outing.pendingItems?.length > 0
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-green-100 text-green-800'
                 }`}>
-                  {outing.status === 'active' ? 'Em campo' : 'Encerrado'}
+                  {outing.status === 'active' ? 'Em campo' : outing.pendingItems?.length > 0 ? 'c/ pendência' : 'Encerrado'}
                 </span>
                 <ChevronRight size={16} className="text-gray-400 flex-shrink-0" />
               </div>

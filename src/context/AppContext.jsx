@@ -123,7 +123,8 @@ export function AppProvider({ children }) {
     return id;
   }
 
-  function registerReturn(outingId, returnedItems, returnedBy, returnDate) {
+  // forceClose: fecha a saída mesmo com itens faltando, registra pendência
+  function registerReturn(outingId, returnedItems, returnedBy, returnDate, forceClose = false) {
     setOutings((prev) =>
       prev.map((o) => {
         if (o.id !== outingId) return o;
@@ -132,13 +133,18 @@ export function AppProvider({ children }) {
           return ret ? { ...item, returned: item.returned + ret.qty } : item;
         });
         const allReturned = updatedItems.every((i) => i.returned >= i.taken);
+        const shouldClose = allReturned || forceClose;
+        const pendingItems = shouldClose
+          ? updatedItems.filter((i) => i.returned < i.taken).map((i) => ({ ...i, missing: i.taken - i.returned }))
+          : [];
         return {
           ...o,
           items: updatedItems,
-          status: allReturned ? 'closed' : 'active',
-          endDate: allReturned ? returnDate : o.endDate,
+          status: shouldClose ? 'closed' : 'active',
+          endDate: shouldClose ? returnDate : o.endDate,
           returnedBy,
           returnDate,
+          pendingItems: pendingItems.length > 0 ? pendingItems : undefined,
         };
       })
     );

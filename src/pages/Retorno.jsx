@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import PurchaseModal from '../components/PurchaseModal';
-import { CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { CheckCircle, AlertTriangle, X, Clock } from 'lucide-react';
 
 function today() {
   return new Date().toISOString().split('T')[0];
@@ -16,16 +16,13 @@ function ReturnModal({ outing, onClose }) {
   const [step, setStep] = useState('form'); // 'form' | 'confirm'
 
   const purchases = getPurchasesForOuting(outing.id);
+  const activeItems = outing.items.filter((i) => i.taken - i.returned > 0);
 
   function setQty(equipmentId, val, max) {
     const num = Math.max(0, Math.min(Number(val) || 0, max));
     setQuantities((prev) => ({ ...prev, [equipmentId]: num }));
   }
 
-  // itens ainda em campo (não devolvidos anteriormente)
-  const activeItems = outing.items.filter((i) => i.taken - i.returned > 0);
-
-  // resumo para tela de confirmação
   const summary = activeItems.map((item) => {
     const stillOut = item.taken - item.returned;
     const qty = quantities[item.equipmentId] || 0;
@@ -36,11 +33,11 @@ function ReturnModal({ outing, onClose }) {
   const missingItems = summary.filter((i) => i.missing > 0);
   const allOk = missingItems.length === 0;
 
-  function handleConfirm() {
+  function handleConfirm(forceClose) {
     const returnedItems = summary
       .map((item) => ({ equipmentId: item.equipmentId, qty: item.qty }))
       .filter((i) => i.qty > 0);
-    registerReturn(outing.id, returnedItems, returnedBy, returnDate);
+    registerReturn(outing.id, returnedItems, returnedBy, returnDate, forceClose);
     onClose();
   }
 
@@ -58,10 +55,10 @@ function ReturnModal({ outing, onClose }) {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="p-5 border-b flex items-center justify-between">
+        <div className="p-5 border-b flex items-start justify-between gap-3">
           <div>
             <h2 className="font-semibold text-gray-800">
-              {step === 'form' ? 'Registrar Retorno' : 'Confirmar Retorno'}
+              {step === 'form' ? 'Registrar Retorno' : 'Revisar Retorno'}
             </h2>
             <p className="text-sm text-gray-500">
               {outing.person} — Saída: {new Date(outing.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}
@@ -70,7 +67,7 @@ function ReturnModal({ outing, onClose }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
-        {/* ── STEP: FORM ── */}
+        {/* ── FORM ── */}
         {step === 'form' && (
           <div className="p-5 space-y-5">
             <div className="grid grid-cols-2 gap-3">
@@ -113,10 +110,7 @@ function ReturnModal({ outing, onClose }) {
                           className="w-7 h-7 border rounded-lg flex items-center justify-center text-sm hover:bg-gray-50 disabled:opacity-40"
                         >−</button>
                         <input
-                          type="number"
-                          min={0}
-                          max={stillOut}
-                          value={qty}
+                          type="number" min={0} max={stillOut} value={qty}
                           onChange={(e) => setQty(item.equipmentId, e.target.value, stillOut)}
                           className="w-12 text-center border rounded-lg py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                         />
@@ -127,9 +121,9 @@ function ReturnModal({ outing, onClose }) {
                         >+</button>
                       </div>
                       <div className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
-                        ok ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                        ok ? 'bg-green-100 text-green-700' : qty === 0 ? 'bg-gray-100 text-gray-500' : 'bg-yellow-100 text-yellow-700'
                       }`}>
-                        {ok ? '✓ ok' : `faltam ${stillOut - qty}`}
+                        {ok ? '✓ ok' : qty === 0 ? 'nenhum' : `faltam ${stillOut - qty}`}
                       </div>
                     </div>
                   );
@@ -150,13 +144,13 @@ function ReturnModal({ outing, onClose }) {
               ) : (
                 <div className="space-y-2">
                   {purchases.map((p) => (
-                    <div key={p.id} className="bg-gray-50 rounded-lg p-3 text-sm">
+                    <div key={p.id} className="bg-gray-50 rounded-lg p-3">
                       <div className="flex justify-between mb-1">
-                        <span className="text-gray-500 text-xs">{new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                        <span className="text-xs text-gray-500">{new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
                         {p.total && <span className="text-green-700 font-semibold text-xs">R$ {p.total}</span>}
                       </div>
                       <ul className="space-y-0.5">
-                        {p.lines.map((l, i) => <li key={i} className="text-gray-700 text-xs">{l.item} × {l.qty}</li>)}
+                        {p.lines.map((l, i) => <li key={i} className="text-xs text-gray-700">{l.item} × {l.qty}</li>)}
                       </ul>
                     </div>
                   ))}
@@ -169,18 +163,18 @@ function ReturnModal({ outing, onClose }) {
               <button
                 onClick={() => setStep('confirm')}
                 disabled={totalReturning === 0}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Revisar Retorno
+                Revisar →
               </button>
             </div>
           </div>
         )}
 
-        {/* ── STEP: CONFIRM ── */}
+        {/* ── CONFIRM ── */}
         {step === 'confirm' && (
           <div className="p-5 space-y-5">
-            {/* Status geral */}
+            {/* Status */}
             {allOk ? (
               <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
                 <CheckCircle className="text-green-600 flex-shrink-0" size={28} />
@@ -192,57 +186,73 @@ function ReturnModal({ outing, onClose }) {
                 </div>
               </div>
             ) : (
-              <div className="flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-0.5" size={26} />
-                <div>
-                  <p className="font-semibold text-yellow-800">Atenção: itens faltando</p>
-                  <p className="text-sm text-yellow-700 mb-2">
-                    {totalReturning} {totalReturning === 1 ? 'item devolvido' : 'itens devolvidos'}, mas há pendências:
-                  </p>
-                  <ul className="space-y-1">
-                    {missingItems.map((i) => (
-                      <li key={i.equipmentId} className="text-sm text-yellow-900 flex justify-between">
-                        <span>• {i.name}</span>
-                        <span className="font-semibold ml-4">falta {i.missing} un.</span>
-                      </li>
-                    ))}
-                  </ul>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-0.5" size={22} />
+                  <div className="flex-1">
+                    <p className="font-semibold text-yellow-800">Atenção: itens faltando</p>
+                    <p className="text-sm text-yellow-700 mt-1 mb-3">
+                      {totalReturning} {totalReturning === 1 ? 'item devolvido' : 'itens devolvidos'}, mas os seguintes itens não foram devolvidos:
+                    </p>
+                    <ul className="space-y-1.5">
+                      {missingItems.map((i) => (
+                        <li key={i.equipmentId} className="flex justify-between text-sm bg-yellow-100 rounded-lg px-3 py-1.5">
+                          <span className="text-yellow-900 font-medium">{i.name}</span>
+                          <span className="text-yellow-800 font-bold">{i.missing} un. faltando</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Lista do que está voltando */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Itens confirmados para retorno</h3>
-              <div className="bg-gray-50 rounded-xl divide-y">
-                {summary.filter((i) => i.qty > 0).map((i) => (
-                  <div key={i.equipmentId} className="flex justify-between items-center px-4 py-2.5 text-sm">
-                    <span className="text-gray-700">{i.name}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-800 font-medium">{i.qty} un. devolvidas</span>
-                      {i.missing > 0 && (
-                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                          faltam {i.missing}
-                        </span>
-                      )}
+            {/* Itens que estão voltando */}
+            {summary.some((i) => i.qty > 0) && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Devolvendo agora</h3>
+                <div className="bg-gray-50 rounded-xl divide-y">
+                  {summary.filter((i) => i.qty > 0).map((i) => (
+                    <div key={i.equipmentId} className="flex justify-between items-center px-4 py-2.5 text-sm">
+                      <span className="text-gray-700">{i.name}</span>
+                      <span className="font-medium text-gray-800">{i.qty} un.</span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setStep('form')} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm">
-                Voltar
+            {/* Ações */}
+            <div className="pt-2 space-y-3">
+              <button onClick={() => setStep('form')} className="w-full border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">
+                ← Voltar e corrigir
               </button>
-              <button
-                onClick={handleConfirm}
-                className={`flex-1 text-white py-2 rounded-lg text-sm font-medium ${
-                  allOk ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-500 hover:bg-yellow-600'
-                }`}
-              >
-                {allOk ? 'Confirmar Retorno' : 'Confirmar com Pendências'}
-              </button>
+
+              {allOk ? (
+                <button
+                  onClick={() => handleConfirm(false)}
+                  className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700"
+                >
+                  ✓ Confirmar Retorno
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleConfirm(false)}
+                    className="w-full flex items-center justify-center gap-2 border-2 border-blue-400 text-blue-700 bg-blue-50 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-100"
+                  >
+                    <Clock size={16} /> Deixar em espera
+                    <span className="text-xs font-normal ml-1">(aguardar os itens que faltam)</span>
+                  </button>
+                  <button
+                    onClick={() => handleConfirm(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-orange-600"
+                  >
+                    <AlertTriangle size={16} /> Finalizar com pendência
+                    <span className="text-xs font-normal ml-1">(registrar falta no histórico)</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
