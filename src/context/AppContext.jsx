@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { DEFAULT_ADMIN, INITIAL_EQUIPMENT } from '../data/initialData';
+import { DEFAULT_ADMIN, DEFAULT_GROUPS, INITIAL_EQUIPMENT } from '../data/initialData';
 
 const AppContext = createContext(null);
 
@@ -22,13 +22,11 @@ function saveStorage(key, value) {
 
 function initEquipment() {
   const existing = loadStorage('equipment', null);
-  if (existing) return existing;
-  const equipment = INITIAL_EQUIPMENT.map((e) => ({
-    id: generateId(),
-    ...e,
-    inUse: 0,
-    photo: null,
-  }));
+  if (existing) {
+    // migrate: add groupId to old items that don't have it
+    return existing.map((e) => e.groupId ? e : { ...e, groupId: 'campo' });
+  }
+  const equipment = INITIAL_EQUIPMENT.map((e) => ({ id: generateId(), ...e, inUse: 0, photo: null }));
   saveStorage('equipment', equipment);
   return equipment;
 }
@@ -40,15 +38,24 @@ function initUsers() {
   return [DEFAULT_ADMIN];
 }
 
+function initGroups() {
+  const existing = loadStorage('groups', null);
+  if (existing) return existing;
+  saveStorage('groups', DEFAULT_GROUPS);
+  return DEFAULT_GROUPS;
+}
+
 export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => loadStorage('currentUser', null));
   const [users, setUsers] = useState(initUsers);
   const [equipment, setEquipment] = useState(initEquipment);
+  const [groups, setGroups] = useState(initGroups);
   const [outings, setOutings] = useState(() => loadStorage('outings', []));
   const [purchases, setPurchases] = useState(() => loadStorage('purchases', []));
 
   useEffect(() => { saveStorage('users', users); }, [users]);
   useEffect(() => { saveStorage('equipment', equipment); }, [equipment]);
+  useEffect(() => { saveStorage('groups', groups); }, [groups]);
   useEffect(() => { saveStorage('outings', outings); }, [outings]);
   useEffect(() => { saveStorage('purchases', purchases); }, [purchases]);
   useEffect(() => { saveStorage('currentUser', currentUser); }, [currentUser]);
@@ -68,8 +75,7 @@ export function AppProvider({ children }) {
 
   // USERS
   function addUser(user) {
-    const newUser = { id: generateId(), ...user };
-    setUsers((prev) => [...prev, newUser]);
+    setUsers((prev) => [...prev, { id: generateId(), ...user }]);
   }
 
   function deleteUser(id) {
@@ -77,10 +83,27 @@ export function AppProvider({ children }) {
     setUsers((prev) => prev.filter((u) => u.id !== id));
   }
 
+  // GROUPS
+  function addGroup(name) {
+    const id = generateId();
+    setGroups((prev) => [...prev, { id, name }]);
+    return id;
+  }
+
+  function deleteGroup(id) {
+    if (id === 'campo' || id === 'mecanica') return;
+    setGroups((prev) => prev.filter((g) => g.id !== id));
+    // move items from deleted group to 'campo'
+    setEquipment((prev) => prev.map((e) => e.groupId === id ? { ...e, groupId: 'campo' } : e));
+  }
+
+  function renameGroup(id, name) {
+    setGroups((prev) => prev.map((g) => g.id === id ? { ...g, name } : g));
+  }
+
   // EQUIPMENT
   function addEquipment(item) {
-    const newItem = { id: generateId(), inUse: 0, ...item };
-    setEquipment((prev) => [...prev, newItem]);
+    setEquipment((prev) => [...prev, { id: generateId(), inUse: 0, groupId: 'campo', ...item }]);
   }
 
   function updateEquipment(id, changes) {
@@ -123,7 +146,6 @@ export function AppProvider({ children }) {
     return id;
   }
 
-  // forceClose: fecha a saída mesmo com itens faltando, registra pendência
   function registerReturn(outingId, returnedItems, returnedBy, returnDate, forceClose = false) {
     setOutings((prev) =>
       prev.map((o) => {
@@ -174,6 +196,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       currentUser, login, logout,
       users, addUser, deleteUser,
+      groups, addGroup, deleteGroup, renameGroup,
       equipment, addEquipment, updateEquipment, deleteEquipment, adjustStock,
       outings, activeOutings, createOuting, registerReturn,
       purchases, addPurchase, getPurchasesForOuting,
