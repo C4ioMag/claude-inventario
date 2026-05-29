@@ -1,265 +1,389 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, ScanLine, CheckCircle, Loader, Plus, Minus } from 'lucide-react';
-import Fuse from 'fuse.js';
+import { X, ScanLine, Loader, Plus, CheckCircle, AlertCircle, KeyRound, ChevronDown } from 'lucide-react';
 
-export default function ReceiptScanner({ onClose }) {
-  const { equipment, adjustStock } = useApp();
-  const [stage, setStage] = useState('upload'); // upload | scanning | review
-  const [imagePreview, setImagePreview] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
-  const [ocrText, setOcrText] = useState('');
-  const [matches, setMatches] = useState([]);
-  const [qtys, setQtys] = useState({});
-  const [selected, setSelected] = useState({});
-  const [error, setError] = useState(null);
-  const [progress, setProgress] = useState(0);
+const STORAGE_KEY = 'gemini_api_key';
 
-  const fuse = new Fuse(equipment, {
-    keys: ['name'],
-    threshold: 0.45,
-    includeScore: true,
+function getApiKey() {
+  return localStorage.getItem(STORAGE_KEY) || '';
+}
+
+function saveApiKey(key) {
+  localStorage.setItem(STORAGE_KEY, key);
+}
+
+// Convert file to base64
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
+}
+
+async function readReceiptWithGemini(apiKey, base64Image, mimeType) {
+  const prompt = `Analise esta imagem de nota fiscal ou invoice. Extraia TODOS os itens/produtos listados com suas quantidades.
+
+Retorne APENAS um JSON array neste formato exato:
+[
+  {"name": "nome do item exatamente como escrito", "quantity": 2},
+  {"name": "outro item", "quantity": 1}
+]
+
+Regras:
+- Inclua TODOS os itens que conseguir ver
+- Se a quantidade não estiver clara, use 1
+- Não inclua valores monetários, apenas itens e quantidades
+- Retorne SOMENTE o JSON, sem explicações`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType, data: base64Image } },
+          ],
+        }],
+        generationConfig: { temperature: 0.1 },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    if (response.status === 400) throw new Error('Chave de API inválida. Verifique e tente novamente.');
+    if (response.status === 429) throw new Error('Limite de uso atingido. Aguarde alguns segundos.');
+    throw new Error(err.error?.message || `Erro ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  // Extract JSON from response
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error('Não foi possível interpretar a resposta. Tente novamente.');
+  return JSON.parse(jsonMatch[0]);
+}
+
+// ─── API Key Setup Screen ──────────────────────────────────────────────────────
+function ApiKeySetup({ onSave }) {
+  const [key, setKey] = useState(getApiKey());
+  const [show, setShow] = useState(false);
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <KeyRound size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-800">
+          <p className="font-semibold mb-1">Configure sua chave do Google Gemini</p>
+          <p>A leitura de notas usa IA para ler a imagem. É gratuito:</p>
+          <ol className="mt-2 space-y-1 list-decimal list-inside text-blue-700">
+            <li>Acesse <strong>aistudio.google.com</strong></li>
+            <li>Clique em <strong>Get API Key</strong></li>
+            <li>Crie ou selecione um projeto</li>
+            <li>Copie a chave e cole abaixo</li>
+          </ol>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Chave da API Gemini</label>
+        <div className="relative">
+          <input
+            type={show ? 'text' : 'password'}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="AIza..."
+            className="w-full border rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+            {show ? 'ocultar' : 'ver'}
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={() => { saveApiKey(key.trim()); onSave(key.trim()); }}
+        disabled={!key.trim()}
+        className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+      >
+        Salvar e Continuar
+      </button>
+    </div>
+  );
+}
+
+// ─── Main Scanner ──────────────────────────────────────────────────────────────
+export default function ReceiptScanner({ onClose }) {
+  const { equipment, adjustStock, addEquipment, groups } = useApp();
+  const [apiKey, setApiKey] = useState(getApiKey());
+  const [stage, setStage] = useState(apiKey ? 'upload' : 'setup');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState(null);
+  // extracted items from Gemini
+  const [items, setItems] = useState([]);
+  // per-item decisions: { action: 'match'|'new'|'skip', matchId, qty, newGroup }
+  const [decisions, setDecisions] = useState({});
 
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
     setImageFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setImagePreview(ev.target.result);
-    reader.readAsDataURL(file);
+    setImagePreview(URL.createObjectURL(file));
     setError(null);
   }
 
-  async function runScan() {
+  async function handleScan() {
     if (!imageFile) return;
-    setStage('scanning');
-    setProgress(0);
+    setScanning(true);
+    setError(null);
     try {
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker(['eng', 'por'], 1, {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            setProgress(Math.round(m.progress * 100));
-          }
-        },
+      const base64 = await fileToBase64(imageFile);
+      const mimeType = imageFile.type || 'image/jpeg';
+      const extracted = await readReceiptWithGemini(apiKey, base64, mimeType);
+      setItems(extracted);
+      // Default decisions: try to auto-match each item
+      const init = {};
+      extracted.forEach((item, i) => {
+        const name = item.name.toLowerCase();
+        const match = equipment.find((e) =>
+          e.name.toLowerCase().includes(name) || name.includes(e.name.toLowerCase())
+        );
+        init[i] = {
+          action: match ? 'match' : 'new',
+          matchId: match?.id || '',
+          qty: item.quantity || 1,
+          newGroup: groups[0]?.id || 'campo',
+        };
       });
-      const { data: { text } } = await worker.recognize(imageFile);
-      await worker.terminate();
-      setOcrText(text);
-      parseAndMatch(text);
+      setDecisions(init);
+      setStage('review');
     } catch (err) {
-      console.error(err);
-      setError('Erro ao processar a imagem. Tente uma foto mais nítida.');
-      setStage('upload');
+      setError(err.message || 'Erro ao ler a nota. Tente novamente.');
+    } finally {
+      setScanning(false);
     }
   }
 
-  function parseAndMatch(text) {
-    const lines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 2);
-    const found = new Map();
-
-    for (const line of lines) {
-      // Try matching each inventory item against this line
-      const results = fuse.search(line);
-      if (results.length > 0 && results[0].score < 0.4) {
-        const item = results[0].item;
-        if (!found.has(item.id)) {
-          // Extract quantity: look for numbers in the line
-          const nums = line.match(/\b(\d+)\b/g);
-          // Pick the smallest number > 0 as likely qty (avoid prices like 150)
-          let qty = 1;
-          if (nums) {
-            const candidates = nums.map(Number).filter((n) => n > 0 && n <= 999);
-            if (candidates.length > 0) qty = Math.min(...candidates);
-          }
-          found.set(item.id, { item, qty, line });
-        }
-      }
-    }
-
-    const matchList = Array.from(found.values());
-    setMatches(matchList);
-    const initQtys = {};
-    const initSelected = {};
-    matchList.forEach(({ item, qty }) => {
-      initQtys[item.id] = qty;
-      initSelected[item.id] = true;
-    });
-    setQtys(initQtys);
-    setSelected(initSelected);
-    setStage('review');
-  }
-
-  function setQty(id, val) {
-    const num = Math.max(1, Math.min(999, Number(val) || 1));
-    setQtys((prev) => ({ ...prev, [id]: num }));
+  function setDecision(i, changes) {
+    setDecisions((prev) => ({ ...prev, [i]: { ...prev[i], ...changes } }));
   }
 
   function handleConfirm() {
-    matches.forEach(({ item }) => {
-      if (selected[item.id]) {
-        const qty = qtys[item.id] || 1;
-        for (let i = 0; i < qty; i++) adjustStock(item.id, 1);
+    items.forEach((item, i) => {
+      const d = decisions[i];
+      if (!d || d.action === 'skip') return;
+      if (d.action === 'match' && d.matchId) {
+        for (let j = 0; j < d.qty; j++) adjustStock(d.matchId, 1);
+      } else if (d.action === 'new') {
+        addEquipment({
+          name: item.name,
+          description: '',
+          category: '',
+          quantity: d.qty,
+          photo: null,
+          groupId: d.newGroup,
+        });
       }
     });
     onClose();
   }
 
+  const activeCount = Object.values(decisions).filter((d) => d?.action !== 'skip').length;
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="p-5 border-b flex items-center justify-between">
+        <div className="p-5 border-b flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
-            <ScanLine size={20} className="text-blue-600" />
-            <h2 className="font-semibold text-gray-800">Leitura de Nota Fiscal</h2>
+            <ScanLine size={20} className="text-purple-600" />
+            <h2 className="font-semibold text-gray-800">Leitura de Nota / Invoice</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
-        </div>
-
-        {/* UPLOAD */}
-        {stage === 'upload' && (
-          <div className="p-6 space-y-5">
-            <p className="text-sm text-gray-600">
-              Tire uma foto ou selecione um arquivo da nota fiscal. O sistema irá identificar os itens e atualizar o estoque automaticamente.
-            </p>
-
-            <label className="block border-2 border-dashed border-blue-300 rounded-xl p-6 text-center cursor-pointer hover:bg-blue-50 transition-colors">
-              <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
-              {imagePreview ? (
-                <img src={imagePreview} alt="Nota" className="max-h-56 mx-auto rounded-lg object-contain" />
-              ) : (
-                <div>
-                  <ScanLine size={40} className="text-blue-300 mx-auto mb-2" />
-                  <p className="text-sm text-blue-600 font-medium">Clique para selecionar a foto</p>
-                  <p className="text-xs text-gray-400 mt-1">JPG, PNG, HEIC — tire uma foto clara e bem iluminada</p>
-                </div>
-              )}
-            </label>
-
-            {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-4 py-2">{error}</p>}
-
-            {imagePreview && (
-              <button
-                onClick={runScan}
-                className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
-              >
-                <ScanLine size={18} /> Analisar Nota
+          <div className="flex items-center gap-2">
+            {stage !== 'setup' && (
+              <button onClick={() => setStage('setup')} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+                <KeyRound size={13} /> API
               </button>
             )}
+            <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
           </div>
-        )}
+        </div>
 
-        {/* SCANNING */}
-        {stage === 'scanning' && (
-          <div className="p-8 text-center space-y-4">
-            <Loader size={40} className="text-blue-500 mx-auto animate-spin" />
-            <p className="font-semibold text-gray-700">Lendo a nota fiscal...</p>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
+        <div className="flex-1 overflow-y-auto">
+          {/* SETUP */}
+          {stage === 'setup' && (
+            <ApiKeySetup onSave={(k) => { setApiKey(k); setStage('upload'); }} />
+          )}
+
+          {/* UPLOAD */}
+          {stage === 'upload' && (
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-500">Selecione uma foto da nota fiscal ou invoice. Quanto mais nítida, melhor o resultado.</p>
+
+              <label className="block border-2 border-dashed border-purple-200 rounded-xl cursor-pointer hover:bg-purple-50 transition-colors overflow-hidden">
+                <input type="file" accept="image/*,application/pdf" onChange={handleFile} className="hidden" capture="environment" />
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Nota" className="max-h-64 w-full object-contain" />
+                ) : (
+                  <div className="p-8 text-center">
+                    <ScanLine size={40} className="text-purple-300 mx-auto mb-2" />
+                    <p className="text-sm text-purple-600 font-medium">Clique para selecionar a foto</p>
+                    <p className="text-xs text-gray-400 mt-1">JPG, PNG, HEIC</p>
+                  </div>
+                )}
+              </label>
+
+              {error && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <AlertCircle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
+
+              <button
+                onClick={handleScan}
+                disabled={!imageFile || scanning}
+                className="w-full bg-purple-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {scanning ? (
+                  <><Loader size={18} className="animate-spin" /> Lendo a nota...</>
+                ) : (
+                  <><ScanLine size={18} /> Ler Nota com IA</>
+                )}
+              </button>
             </div>
-            <p className="text-sm text-gray-400">{progress}% concluído</p>
-          </div>
-        )}
+          )}
 
-        {/* REVIEW */}
-        {stage === 'review' && (
-          <div className="p-5 space-y-5">
-            {matches.length === 0 ? (
-              <div className="text-center py-6">
-                <p className="text-gray-500 font-medium">Nenhum item identificado</p>
-                <p className="text-sm text-gray-400 mt-1">
-                  Tente uma foto mais clara ou com melhor iluminação.
+          {/* REVIEW */}
+          {stage === 'review' && (
+            <div className="p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={18} className="text-green-600" />
+                <p className="text-sm font-semibold text-gray-700">
+                  {items.length} {items.length === 1 ? 'item encontrado' : 'itens encontrados'} — revise e confirme
                 </p>
-                {ocrText && (
-                  <details className="mt-4 text-left">
-                    <summary className="text-xs text-gray-400 cursor-pointer">Ver texto extraído</summary>
-                    <pre className="text-xs text-gray-500 mt-2 bg-gray-50 p-3 rounded-lg whitespace-pre-wrap max-h-40 overflow-y-auto">{ocrText}</pre>
-                  </details>
-                )}
-                <button onClick={() => setStage('upload')} className="mt-4 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm">
-                  Tentar novamente
-                </button>
               </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <CheckCircle size={18} className="text-green-600" />
-                  <p className="text-sm font-semibold text-gray-700">
-                    {matches.length} {matches.length === 1 ? 'item identificado' : 'itens identificados'} — confirme as quantidades
-                  </p>
-                </div>
 
-                <div className="space-y-2">
-                  {matches.map(({ item, line }) => (
-                    <div
-                      key={item.id}
-                      className={`rounded-xl border p-3 transition-colors ${
-                        selected[item.id] ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={!!selected[item.id]}
-                          onChange={(e) => setSelected((s) => ({ ...s, [item.id]: e.target.checked }))}
-                          className="mt-1 accent-blue-600"
-                        />
-                        <div className="flex-1 min-w-0">
+              <div className="space-y-3">
+                {items.map((item, i) => {
+                  const d = decisions[i] || {};
+                  const skipped = d.action === 'skip';
+                  return (
+                    <div key={i} className={`rounded-xl border p-3 space-y-2 transition-opacity ${skipped ? 'opacity-40' : 'border-gray-200'}`}>
+                      {/* Item name from receipt */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
                           <p className="text-sm font-semibold text-gray-800">{item.name}</p>
-                          <p className="text-xs text-gray-400 truncate">Linha da nota: "{line}"</p>
-                          <p className="text-xs text-gray-500 mt-0.5">Estoque atual: {item.quantity}</p>
+                          <p className="text-xs text-gray-400">Lido da nota</p>
                         </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <button
-                            onClick={() => setQty(item.id, (qtys[item.id] || 1) - 1)}
-                            disabled={!selected[item.id] || qtys[item.id] <= 1}
-                            className="w-7 h-7 border rounded-lg flex items-center justify-center text-sm disabled:opacity-40 hover:bg-white"
-                          ><Minus size={12} /></button>
-                          <input
-                            type="number"
-                            min={1}
-                            value={qtys[item.id] || 1}
-                            onChange={(e) => setQty(item.id, e.target.value)}
-                            disabled={!selected[item.id]}
-                            className="w-12 text-center border rounded-lg py-1 text-sm focus:outline-none bg-white disabled:opacity-40"
-                          />
-                          <button
-                            onClick={() => setQty(item.id, (qtys[item.id] || 1) + 1)}
-                            disabled={!selected[item.id]}
-                            className="w-7 h-7 border rounded-lg flex items-center justify-center text-sm disabled:opacity-40 hover:bg-white"
-                          ><Plus size={12} /></button>
-                        </div>
+                        <button
+                          onClick={() => setDecision(i, { action: skipped ? (decisions[i]?.matchId ? 'match' : 'new') : 'skip' })}
+                          className={`text-xs px-2 py-1 rounded-lg border flex-shrink-0 ${skipped ? 'border-gray-300 text-gray-500' : 'border-red-200 text-red-500 hover:bg-red-50'}`}
+                        >
+                          {skipped ? 'restaurar' : 'ignorar'}
+                        </button>
                       </div>
+
+                      {!skipped && (
+                        <>
+                          {/* Action selector */}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setDecision(i, { action: 'match' })}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                d.action === 'match' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:border-blue-300'
+                              }`}
+                            >
+                              Vincular a item existente
+                            </button>
+                            <button
+                              onClick={() => setDecision(i, { action: 'new' })}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                d.action === 'new' ? 'bg-green-600 text-white border-green-600' : 'border-gray-300 text-gray-600 hover:border-green-300'
+                              }`}
+                            >
+                              Criar item novo
+                            </button>
+                          </div>
+
+                          {/* Match to existing */}
+                          {d.action === 'match' && (
+                            <div className="relative">
+                              <select
+                                value={d.matchId || ''}
+                                onChange={(e) => setDecision(i, { matchId: e.target.value })}
+                                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8"
+                              >
+                                <option value="">— selecione o item —</option>
+                                {equipment.map((e) => (
+                                  <option key={e.id} value={e.id}>{e.name} (estoque: {e.quantity})</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                          )}
+
+                          {/* New item group */}
+                          {d.action === 'new' && (
+                            <div className="relative">
+                              <select
+                                value={d.newGroup || groups[0]?.id}
+                                onChange={(e) => setDecision(i, { newGroup: e.target.value })}
+                                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none pr-8"
+                              >
+                                {groups.map((g) => <option key={g.id} value={g.id}>Grupo: {g.name}</option>)}
+                              </select>
+                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                          )}
+
+                          {/* Quantity */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 flex-shrink-0">Quantidade:</span>
+                            <button onClick={() => setDecision(i, { qty: Math.max(1, (d.qty || 1) - 1) })}
+                              className="w-7 h-7 border rounded-lg flex items-center justify-center text-sm hover:bg-gray-50">−</button>
+                            <input
+                              type="number" min={1} value={d.qty || 1}
+                              onChange={(e) => setDecision(i, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                              className="w-16 text-center border rounded-lg py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            />
+                            <button onClick={() => setDecision(i, { qty: (d.qty || 1) + 1 })}
+                              className="w-7 h-7 border rounded-lg flex items-center justify-center text-sm hover:bg-gray-50">+</button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
-                {ocrText && (
-                  <details className="text-left">
-                    <summary className="text-xs text-gray-400 cursor-pointer">Ver texto completo extraído</summary>
-                    <pre className="text-xs text-gray-500 mt-2 bg-gray-50 p-3 rounded-lg whitespace-pre-wrap max-h-40 overflow-y-auto">{ocrText}</pre>
-                  </details>
-                )}
-
-                <div className="flex gap-3 pt-2">
-                  <button onClick={() => setStage('upload')} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm">
-                    Tentar novamente
-                  </button>
-                  <button
-                    onClick={handleConfirm}
-                    disabled={!Object.values(selected).some(Boolean)}
-                    className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
-                  >
-                    Adicionar ao Estoque
-                  </button>
-                </div>
-              </>
-            )}
+        {/* Footer */}
+        {stage === 'review' && (
+          <div className="p-5 border-t flex gap-3 flex-shrink-0">
+            <button onClick={() => setStage('upload')} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-xl text-sm">
+              ← Voltar
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={activeCount === 0}
+              className="flex-1 bg-green-600 text-white py-2 rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+            >
+              Aplicar {activeCount} {activeCount === 1 ? 'item' : 'itens'}
+            </button>
           </div>
         )}
       </div>
