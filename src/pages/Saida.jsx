@@ -2,8 +2,16 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
-function today() {
-  return new Date().toISOString().split('T')[0];
+function today() { return new Date().toISOString().split('T')[0]; }
+
+function Step({ n, active, done }) {
+  return (
+    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
+      done ? 'bg-apple-green text-white' : active ? 'bg-apple-blue text-white' : 'bg-apple-border text-apple-text-2'
+    }`}>
+      {done ? '✓' : n}
+    </div>
+  );
 }
 
 export default function Saida() {
@@ -14,116 +22,90 @@ export default function Saida() {
   const [date, setDate] = useState(today());
   const [quantities, setQuantities] = useState({});
 
-  const categories = [...new Set(equipment.map((e) => e.category).filter(Boolean))].sort();
+  const categories = [...new Set(equipment.map(e => e.category).filter(Boolean))].sort();
 
-  function setQty(id, val, maxAvailable) {
-    const num = Math.max(0, Math.min(Number(val) || 0, maxAvailable));
-    setQuantities((prev) => ({ ...prev, [id]: num }));
+  function setQty(id, val, max) {
+    const n = Math.max(0, Math.min(Number(val) || 0, max));
+    setQuantities(p => ({ ...p, [id]: n }));
   }
 
   const selectedItems = equipment
-    .map((e) => ({ ...e, qty: quantities[e.id] || 0, available: e.quantity - e.inUse }))
-    .filter((e) => e.qty > 0);
+    .map(e => ({ ...e, qty: quantities[e.id] || 0, available: e.quantity - e.inUse }))
+    .filter(e => e.qty > 0);
 
   function handleConfirm() {
-    createOuting(
-      person,
-      date,
-      selectedItems.map((i) => ({ equipmentId: i.id, name: i.name, qty: i.qty }))
-    );
+    createOuting(person, date, selectedItems.map(i => ({ equipmentId: i.id, name: i.name, qty: i.qty })));
     navigate('/campo');
   }
 
-  return (
-    <div className="max-w-2xl mx-auto space-y-5">
-      <h1 className="text-2xl font-bold text-gray-800">Registrar Saída</h1>
+  const inputClass = "w-full bg-apple-bg border border-apple-border rounded-apple px-3.5 py-2.5 text-sm text-apple-text focus:outline-none focus:ring-2 focus:ring-apple-blue/40 focus:border-apple-blue transition-all";
 
-      {/* Steps indicator */}
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-apple-text text-2xl font-semibold tracking-tight">Registrar Saída</h1>
+        <p className="text-apple-text-2 text-sm mt-0.5">Registre os itens que estão saindo do estoque</p>
+      </div>
+
+      {/* Steps */}
       <div className="flex items-center gap-2">
-        {[1, 2, 3].map((s) => (
+        {[1,2,3].map((s, i) => (
           <div key={s} className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-              step >= s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
-            }`}>{s}</div>
-            {s < 3 && <div className={`h-0.5 w-12 ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
+            <Step n={s} active={step === s} done={step > s} />
+            {i < 2 && <div className={`h-px w-10 ${step > s ? 'bg-apple-green' : 'bg-apple-border'}`} />}
           </div>
         ))}
-        <div className="ml-2 text-sm text-gray-500">
-          {step === 1 && 'Identificação'} {step === 2 && 'Itens'} {step === 3 && 'Conferência'}
-        </div>
+        <span className="ml-2 text-sm text-apple-text-2">
+          {step === 1 && 'Identificação'}{step === 2 && 'Itens'}{step === 3 && 'Conferência'}
+        </span>
       </div>
 
       {step === 1 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-800">Quem está retirando?</h2>
+        <div className="bg-apple-card rounded-apple shadow-apple-sm p-6 space-y-4">
+          <h2 className="text-apple-text font-semibold">Quem está retirando?</h2>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nome da pessoa</label>
-            <input
-              required
-              value={person}
-              onChange={(e) => setPerson(e.target.value)}
-              placeholder="Nome completo"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="block text-sm font-medium text-apple-text mb-1.5">Nome da pessoa</label>
+            <input value={person} onChange={e => setPerson(e.target.value)}
+              placeholder="Nome completo" className={inputClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Data de retirada</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="block text-sm font-medium text-apple-text mb-1.5">Data de retirada</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} />
           </div>
-          <button
-            disabled={!person.trim()}
-            onClick={() => setStep(2)}
-            className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <button disabled={!person.trim()} onClick={() => setStep(2)}
+            className="w-full bg-apple-blue hover:bg-apple-blue-hover text-white font-semibold py-2.5 rounded-apple text-sm transition-all shadow-apple disabled:opacity-50">
             Próximo
           </button>
         </div>
       )}
 
       {step === 2 && (
-        <div className="space-y-4">
-          {categories.map((cat) => {
-            const items = equipment.filter((e) => e.category === cat);
+        <div className="space-y-3">
+          {categories.map(cat => {
+            const items = equipment.filter(e => e.category === cat);
             return (
-              <div key={cat} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b">
-                  <h3 className="text-sm font-semibold text-gray-700">{cat}</h3>
+              <div key={cat} className="bg-apple-card rounded-apple shadow-apple-sm overflow-hidden">
+                <div className="px-4 py-2.5 bg-apple-bg border-b border-apple-border">
+                  <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider">{cat}</p>
                 </div>
-                <div className="divide-y">
-                  {items.map((item) => {
+                <div className="divide-y divide-apple-border">
+                  {items.map(item => {
                     const available = item.quantity - item.inUse;
                     const qty = quantities[item.id] || 0;
-                    const isEmpty = available === 0;
                     return (
-                      <div key={item.id} className={`flex items-center justify-between px-4 py-3 gap-3 ${isEmpty ? 'opacity-40' : ''}`}>
+                      <div key={item.id} className={`flex items-center gap-3 px-4 py-3 ${available === 0 ? 'opacity-35' : ''}`}>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                          <p className="text-xs text-gray-500">Disponível: {available}</p>
+                          <p className="text-sm font-medium text-apple-text truncate">{item.name}</p>
+                          <p className="text-xs text-apple-text-2">Disponível: {available}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setQty(item.id, qty - 1, available)}
-                            disabled={qty === 0}
-                            className="w-7 h-7 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40"
-                          >−</button>
-                          <input
-                            type="number"
-                            min={0}
-                            max={available}
-                            value={qty}
-                            onChange={(e) => setQty(item.id, e.target.value, available)}
-                            className="w-12 text-center border border-gray-300 rounded-lg py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          <button
-                            onClick={() => setQty(item.id, qty + 1, available)}
-                            disabled={qty >= available || isEmpty}
-                            className="w-7 h-7 rounded-lg border border-blue-300 text-blue-700 flex items-center justify-center hover:bg-blue-50 disabled:opacity-40"
-                          >+</button>
+                          <button onClick={() => setQty(item.id, qty - 1, available)} disabled={qty === 0}
+                            className="w-8 h-8 rounded-full border border-apple-border text-apple-text flex items-center justify-center text-lg font-light hover:bg-apple-bg disabled:opacity-30 transition-colors">−</button>
+                          <input type="number" min={0} max={available} value={qty}
+                            onChange={e => setQty(item.id, e.target.value, available)}
+                            className="w-12 text-center bg-apple-bg border border-apple-border rounded-apple py-1 text-sm focus:outline-none focus:ring-2 focus:ring-apple-blue/40" />
+                          <button onClick={() => setQty(item.id, qty + 1, available)} disabled={qty >= available || available === 0}
+                            className="w-8 h-8 rounded-full bg-apple-blue text-white flex items-center justify-center text-lg font-light hover:bg-apple-blue-hover disabled:opacity-30 transition-colors">+</button>
                         </div>
                       </div>
                     );
@@ -132,14 +114,11 @@ export default function Saida() {
               </div>
             );
           })}
-          <div className="flex gap-3">
-            <button onClick={() => setStep(1)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm">Voltar</button>
-            <button
-              disabled={selectedItems.length === 0}
-              onClick={() => setStep(3)}
-              className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
-            >
-              Próximo ({selectedItems.length} {selectedItems.length === 1 ? 'item' : 'itens'})
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setStep(1)} className="flex-1 bg-apple-bg border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-border/30 transition-colors">Voltar</button>
+            <button onClick={() => setStep(3)} disabled={selectedItems.length === 0}
+              className="flex-1 bg-apple-blue text-white py-2.5 rounded-apple text-sm font-semibold hover:bg-apple-blue-hover disabled:opacity-50 shadow-apple transition-all">
+              Próximo · {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'itens'}
             </button>
           </div>
         </div>
@@ -147,31 +126,31 @@ export default function Saida() {
 
       {step === 3 && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-800 mb-4">Conferência</h2>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-blue-50 rounded-lg p-3">
-                <p className="text-xs text-blue-500">Pessoa</p>
-                <p className="font-semibold text-blue-800">{person}</p>
+          <div className="bg-apple-card rounded-apple shadow-apple-sm p-6">
+            <h2 className="text-apple-text font-semibold mb-4">Conferência</h2>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="bg-apple-blue/8 rounded-apple p-3">
+                <p className="text-xs text-apple-blue font-medium">Pessoa</p>
+                <p className="font-semibold text-apple-text mt-0.5">{person}</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3">
-                <p className="text-xs text-blue-500">Data</p>
-                <p className="font-semibold text-blue-800">{new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+              <div className="bg-apple-blue/8 rounded-apple p-3">
+                <p className="text-xs text-apple-blue font-medium">Data</p>
+                <p className="font-semibold text-apple-text mt-0.5">{new Date(date+'T12:00:00').toLocaleDateString('pt-BR')}</p>
               </div>
             </div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Itens selecionados:</h3>
-            <ul className="space-y-1">
-              {selectedItems.map((i) => (
-                <li key={i.id} className="flex justify-between text-sm py-1.5 border-b last:border-0">
-                  <span className="text-gray-700">{i.name}</span>
-                  <span className="font-semibold text-gray-800">{i.qty} un.</span>
-                </li>
+            <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider mb-3">Itens selecionados</p>
+            <div className="space-y-1">
+              {selectedItems.map(i => (
+                <div key={i.id} className="flex justify-between items-center py-2 border-b border-apple-border last:border-0">
+                  <span className="text-sm text-apple-text">{i.name}</span>
+                  <span className="text-sm font-semibold text-apple-text bg-apple-bg px-2.5 py-0.5 rounded-full">{i.qty} un.</span>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setStep(2)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm">Voltar</button>
-            <button onClick={handleConfirm} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg text-sm hover:bg-green-700">
+            <button onClick={() => setStep(2)} className="flex-1 bg-apple-bg border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-border/30 transition-colors">Voltar</button>
+            <button onClick={handleConfirm} className="flex-1 bg-apple-green text-white py-2.5 rounded-apple text-sm font-semibold hover:opacity-90 shadow-apple transition-all">
               Confirmar Saída
             </button>
           </div>
