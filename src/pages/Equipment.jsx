@@ -209,6 +209,7 @@ function EditModal({ item, onClose }) {
 function DetailModal({ item, onClose, onEdit, onDelete, currentUser, adjustStock }) {
   const available = item.quantity - item.inUse;
   const pct = item.quantity > 0 ? Math.round((item.inUse / item.quantity) * 100) : 0;
+  const [adjQty, setAdjQty] = useState(1);
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -262,14 +263,23 @@ function DetailModal({ item, onClose, onEdit, onDelete, currentUser, adjustStock
 
           <div>
             <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider mb-2.5">Ajustar Estoque</p>
+            <div className="flex items-center gap-2 mb-3">
+              <button onClick={() => setAdjQty(q => Math.max(1, q - 1))}
+                className="w-9 h-9 border border-apple-border rounded-apple bg-apple-bg flex items-center justify-center text-apple-text text-lg hover:bg-apple-border/30 transition-colors flex-shrink-0">−</button>
+              <input type="number" min={1} value={adjQty}
+                onChange={e => setAdjQty(Math.max(1, Number(e.target.value) || 1))}
+                className="flex-1 text-center bg-apple-bg border border-apple-border rounded-apple py-2 text-lg font-semibold text-apple-text focus:outline-none focus:ring-2 focus:ring-apple-blue/40" />
+              <button onClick={() => setAdjQty(q => q + 1)}
+                className="w-9 h-9 bg-apple-blue text-white rounded-apple flex items-center justify-center text-lg hover:bg-apple-blue-hover transition-colors flex-shrink-0">+</button>
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => adjustStock(item.id, -1)} disabled={item.quantity <= item.inUse}
-                className="flex-1 flex items-center justify-center gap-2 border border-apple-border text-apple-text py-3 rounded-apple text-sm font-medium hover:bg-apple-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                <Minus size={16} /> Remover 1
+              <button onClick={() => { adjustStock(item.id, -adjQty); }} disabled={item.quantity - adjQty < item.inUse}
+                className="flex-1 flex items-center justify-center gap-2 border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                <Minus size={15} /> Retirar {adjQty}
               </button>
-              <button onClick={() => adjustStock(item.id, 1)}
-                className="flex-1 flex items-center justify-center gap-2 border border-apple-blue/40 text-apple-blue py-3 rounded-apple text-sm font-medium hover:bg-apple-blue/5 transition-colors">
-                <Plus size={16} /> Adicionar 1
+              <button onClick={() => { adjustStock(item.id, adjQty); }}
+                className="flex-1 flex items-center justify-center gap-2 border border-apple-blue/40 text-apple-blue py-2.5 rounded-apple text-sm font-medium hover:bg-apple-blue/5 transition-colors">
+                <Plus size={15} /> Adicionar {adjQty}
               </button>
             </div>
           </div>
