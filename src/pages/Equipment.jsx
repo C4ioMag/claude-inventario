@@ -265,12 +265,11 @@ function DetailModal({ item, onClose, onEdit, onDelete, currentUser, adjustStock
             <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider mb-2.5">Ajustar Estoque</p>
             <div className="flex items-center gap-2 mb-3">
               <button onClick={() => setAdjQty(q => Math.max(1, q - 1))}
-                className="w-9 h-9 border border-apple-border rounded-apple bg-apple-bg flex items-center justify-center text-apple-text text-lg hover:bg-apple-border/30 transition-colors flex-shrink-0">−</button>
-              <input type="number" min={1} value={adjQty}
-                onChange={e => setAdjQty(Math.max(1, Number(e.target.value) || 1))}
-                className="flex-1 text-center bg-apple-bg border border-apple-border rounded-apple py-2 text-lg font-semibold text-apple-text focus:outline-none focus:ring-2 focus:ring-apple-blue/40" />
+                className="w-10 h-10 border border-apple-border rounded-apple bg-apple-bg flex items-center justify-center text-apple-text text-xl font-light hover:bg-apple-border/30 disabled:opacity-30 transition-colors flex-shrink-0"
+                disabled={adjQty <= 1}>−</button>
+              <div className="flex-1 text-center py-2 text-2xl font-semibold text-apple-text select-none">{adjQty}</div>
               <button onClick={() => setAdjQty(q => q + 1)}
-                className="w-9 h-9 bg-apple-blue text-white rounded-apple flex items-center justify-center text-lg hover:bg-apple-blue-hover transition-colors flex-shrink-0">+</button>
+                className="w-10 h-10 bg-apple-blue text-white rounded-apple flex items-center justify-center text-xl font-light hover:bg-apple-blue-hover transition-colors flex-shrink-0">+</button>
             </div>
             <div className="flex gap-3">
               <button onClick={() => { adjustStock(item.id, -adjQty); }} disabled={item.quantity - adjQty < item.inUse}
