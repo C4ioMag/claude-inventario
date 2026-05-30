@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { X, ScanLine, Loader, CheckCircle, AlertCircle, ChevronDown, FileText, ImageIcon, Pencil } from 'lucide-react';
 
 // ─── PDF text extraction (pdfjs-dist) ─────────────────────────────────────────
+// Groups text items by their Y position to reconstruct rows (preserves column order)
 async function extractPdfText(file) {
   const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
   GlobalWorkerOptions.workerSrc = new URL(
@@ -15,7 +16,22 @@ async function extractPdfText(file) {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map((it) => it.str).join(' ') + '\n';
+
+    // Group by rounded Y coordinate so columns on the same row get joined
+    const rowMap = new Map();
+    content.items.forEach((item) => {
+      if (!item.str.trim()) return;
+      const y = Math.round(item.transform[5] / 2) * 2; // bucket to 2pt
+      if (!rowMap.has(y)) rowMap.set(y, []);
+      rowMap.get(y).push({ x: item.transform[4], str: item.str });
+    });
+
+    const rows = [...rowMap.entries()]
+      .sort((a, b) => b[0] - a[0]) // top → bottom
+      .map(([, cols]) =>
+        cols.sort((a, b) => a.x - b.x).map((c) => c.str).join(' ')
+      );
+    text += rows.join('\n') + '\n';
   }
   return text;
 }
@@ -33,53 +49,126 @@ async function ocrImage(file, onProgress) {
 }
 
 // ─── Parser ────────────────────────────────────────────────────────────────────
+// Understands NF-e Brazilian format: [code] [description] [UNIT] [qty] [price] [total]
+// Key rule: prices have exactly 2 decimal places (XX,XX). Quantities are integers
+// or have 3 decimal places (XX,XXX). This avoids confusing "25,90" with a quantity.
+const UNITS_STR = 'UN(?:D)?|KG[Ss]?|PC[Ss]?|CX|M(?:T|M)?|L(?:T)?|GL|SC|ROL|RL|FD|BD|PR|JG|KIT|CT|PAR|PCT|TON|GR[Ss]?|KM';
+const UNITS_RE  = new RegExp(`\\b(${UNITS_STR})\\b`, 'gi');
+const SKIP_LINE = /^\s*(CNPJ|CPF|TOTAL\b|SUBTOTAL|DESCONTO|TROCO|PAGO|OBRIGADO|CUPOM|DANFE|NF-?E|ENDERE|CEP\b|FONE\b|FAX\b|IE\s*:|IM\s*:|FORMA\s+DE|VALOR\s+TOTAL|EMISS|CHAVE|S[EÉ]RIE|N[UÚ]MERO|PROTOCOLO|INSCRI|DATA\b|HORA\b|ITEM\s+COD|DESCRI|CFOP|NCM|CST|ALIQ|BASE\s+DE|TABELA)/i;
+
+function isPrice(str) {
+  // Prices in Brazil: exactly 2 decimal places  e.g. "25,90" or "1.250,90"
+  return /^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(str) || /^\d+,\d{2}$/.test(str);
+}
+
+function parseQty(str) {
+  // Accept integer or 3-decimal "quantity" format (50,000 = 50 units)
+  if (!str) return null;
+  const clean = str.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(clean);
+  if (isNaN(n) || n <= 0 || n >= 10000) return null;
+  if (isPrice(str)) return null; // definitely a price, not a qty
+  return Math.round(n);
+}
+
 function parseText(raw) {
-  const SKIP = /^(CNPJ|CPF|TOTAL|SUBTOTAL|DESCONTO|TROCO|PAGO|OBRIGADO|CUPOM|DANFE|NF-?E|ENDERE|CEP|FONE|FAX|IE:|IM:|VL\s|FORMA|VALOR|EMISS|CHAVE|SERIE|NUMERO|PROTOCOLO|INSC)/i;
-  const UNIT = /\b(UN|KG|KGS|PC|PCS|CX|MT|M|LT|L|GL|SC|ROL|RL|FD|BD|PR|JG|KIT|CT|PAR|PCT)\b/i;
+  const items  = [];
+  const seen   = new Set();
 
-  const items = [];
-  const seen = new Set();
+  raw.split('\n').forEach((rawLine) => {
+    let line = rawLine.trim().replace(/\s{2,}/g, ' ');
+    if (line.length < 5) return;
+    if (SKIP_LINE.test(line)) return;
 
-  raw.split('\n').forEach((raw) => {
-    const line = raw.trim().replace(/\s{2,}/g, ' ');
-    if (line.length < 4) return;
-    if (SKIP.test(line)) return;
-    if (/^\d{6,}/.test(line)) return;          // barcode / long code
-    if (/^[\d\s.,*\-\/R$%]+$/.test(line)) return; // purely numeric/punctuation
+    // Skip lines with fewer than 3 letters — mostly numbers/prices
+    if ((line.match(/[A-ZÀ-ÖØ-öø-ÿa-z]/g) || []).length < 3) return;
+    // Skip barcodes
+    if (/^\d{8,}/.test(line)) return;
+
+    // Remove leading item code (1-6 digits before a letter word) — NF-e item #
+    line = line.replace(/^\d{1,6}(?=\s+[A-ZÀ-Ö])/i, '').trim();
 
     let qty = 1;
     let name = line;
+    let matched = false;
 
-    // "5 UN CABO FIBRA" or "CABO FIBRA 5 UN"
-    const withUnit = line.match(/^([\d.,]+)\s*x?\s*UN\b\s*(.+)$/i)
-                  || line.match(/^(.+?)\s+([\d.,]+)\s*x?\s*UN\b/i);
-    if (withUnit) {
-      const q = parseFloat((withUnit[1] || withUnit[2]).replace(',', '.'));
-      if (!isNaN(q) && q > 0 && q < 10000) { qty = Math.round(q); }
-      name = (withUnit[2] || withUnit[1]).replace(UNIT, '').trim();
-    } else {
-      // Leading number: "3 CABO FIBRA OPTICA"
-      const leading = line.match(/^(\d{1,4})\s+([A-ZÀ-Ö].{3,})$/i);
-      if (leading) {
-        qty = parseInt(leading[1]);
-        name = leading[2].trim();
-      } else {
-        // Trailing number: "CABO FIBRA OPTICA 10"
-        const trailing = line.match(/^([A-ZÀ-Ö].{3,}?)\s+(\d{1,4})$/i);
-        if (trailing) {
-          qty = parseInt(trailing[2]);
-          name = trailing[1].trim();
-        }
+    // ── Pattern A: NF-e table — "DESCRIÇÃO UN 10,000 25,90 259,00"
+    //    quantity comes immediately after the unit abbreviation
+    const unitRe = new RegExp(`^(.+?)\\s+\\b(${UNITS_STR})\\b\\s+([\\d.,]+)(.*)$`, 'i');
+    const mA = line.match(unitRe);
+    if (mA) {
+      const candidate = mA[3];
+      const q = parseQty(candidate);
+      if (q !== null) {
+        qty = q;
+        name = mA[1].trim();
+        matched = true;
+      } else if (!isPrice(candidate)) {
+        // unit found but qty unclear — still extract the name before the unit
+        name = mA[1].trim();
+        matched = true;
       }
     }
 
-    // Strip price patterns (R$ 9,99)
-    name = name.replace(/R\$\s*[\d.,]+/g, '').replace(UNIT, '').replace(/\s{2,}/g, ' ').trim();
+    if (!matched) {
+      // ── Pattern B: leading qty + unit — "10 UN CABO FIBRA" or "10,000 UN CABO FIBRA"
+      const mB = line.match(new RegExp(`^([\\d.,]+)\\s*\\b(${UNITS_STR})\\b\\s+(.+)$`, 'i'));
+      if (mB) {
+        const q = parseQty(mB[1]);
+        if (q !== null) qty = q;
+        name = mB[3].trim();
+        matched = true;
+      }
+    }
 
-    if (name.length < 3 || qty < 1 || qty > 9999) return;
+    if (!matched) {
+      // ── Pattern C: leading integer — "10 CABO FIBRA OPTICA" (no unit)
+      const mC = line.match(/^(\d{1,4})\s+([A-ZÀ-Öa-z].{3,})$/);
+      if (mC && !isPrice(mC[1])) {
+        qty = parseInt(mC[1]);
+        name = mC[2].trim();
+        matched = true;
+      }
+    }
 
-    const key = name.toLowerCase();
-    if (!seen.has(key)) { seen.add(key); items.push({ name, quantity: qty }); }
+    if (!matched) {
+      // ── Pattern D: trailing integer — "CABO FIBRA OPTICA 10"
+      const mD = line.match(/^([A-ZÀ-Öa-z].{3,?})\s+(\d{1,4})$/);
+      if (mD) {
+        qty = parseInt(mD[2]);
+        name = mD[1].trim();
+        matched = true;
+      }
+    }
+
+    // ── Pattern E: x-multiplier — "CABO FIBRA x10" or "CABO FIBRA X 10"
+    if (!matched) {
+      const mE = line.match(/^(.+?)\s+[xX]\s*(\d{1,4})$/);
+      if (mE) {
+        qty = parseInt(mE[2]);
+        name = mE[1].trim();
+        matched = true;
+      }
+    }
+
+    // Cleanup: strip R$ prices, unit abbreviations, leftover numbers at edges
+    name = name
+      .replace(/R\$\s*[\d.,]+/g, '')      // R$ prices
+      .replace(/\b\d+[.,]\d{2}\b/g, '')   // remaining 2-decimal prices
+      .replace(UNITS_RE, '')               // unit abbreviations
+      .replace(/^\d{1,4}\s+/, '')          // leftover leading number
+      .replace(/\s+\d{1,4}$/, '')          // leftover trailing number
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    if (name.length < 3) return;
+    if (qty < 1 || qty > 9999) qty = 1;
+
+    const key = name.toLowerCase().replace(/\s+/g, ' ');
+    if (!seen.has(key)) {
+      seen.add(key);
+      items.push({ name, quantity: qty });
+    }
   });
 
   return items;
@@ -95,6 +184,9 @@ export default function ReceiptScanner({ onClose }) {
   const [error, setError] = useState(null);
   const [items, setItems] = useState([]);
   const [decisions, setDecisions] = useState({});
+  const [rawText, setRawText] = useState('');
+  const [showRaw, setShowRaw] = useState(false);
+  const [manualName, setManualName] = useState('');
   const fileRef = useRef();
 
   const isPdf = file?.type === 'application/pdf';
@@ -123,12 +215,8 @@ export default function ReceiptScanner({ onClose }) {
         text = await ocrImage(file, setProgress);
       }
 
+      setRawText(text);
       const parsed = parseText(text);
-      if (parsed.length === 0) {
-        setError('Nenhum item reconhecido. Tente uma imagem mais nítida ou verifique se o PDF tem texto selecionável.');
-        setStage('upload');
-        return;
-      }
 
       // Auto-match each parsed item to existing equipment
       const init = {};
@@ -149,6 +237,7 @@ export default function ReceiptScanner({ onClose }) {
       setItems(parsed);
       setDecisions(init);
       setStage('review');
+      if (parsed.length === 0) setShowRaw(true); // show raw text automatically if nothing found
     } catch (err) {
       setError(err.message || 'Erro ao processar. Tente novamente.');
       setStage('upload');
@@ -159,12 +248,24 @@ export default function ReceiptScanner({ onClose }) {
     setDecisions((prev) => ({ ...prev, [i]: { ...prev[i], ...changes } }));
   }
 
+  function addManualItem() {
+    const name = manualName.trim();
+    if (!name) return;
+    const idx = items.length;
+    setItems((prev) => [...prev, { name, quantity: 1 }]);
+    setDecisions((prev) => ({
+      ...prev,
+      [idx]: { action: 'new', matchId: '', qty: 1, newGroup: groups[0]?.id || 'campo', nameEdit: name },
+    }));
+    setManualName('');
+  }
+
   function handleConfirm() {
     items.forEach((item, i) => {
       const d = decisions[i];
       if (!d || d.action === 'skip') return;
       if (d.action === 'match' && d.matchId) {
-        for (let j = 0; j < d.qty; j++) adjustStock(d.matchId, 1);
+        adjustStock(d.matchId, d.qty); // add qty units at once
       } else if (d.action === 'new') {
         addEquipment({ name: d.nameEdit || item.name, description: '', category: '', quantity: d.qty, photo: null, groupId: d.newGroup });
       }
@@ -264,11 +365,41 @@ export default function ReceiptScanner({ onClose }) {
           {/* REVIEW */}
           {stage === 'review' && (
             <div className="p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle size={16} className="text-[#34C759]" />
-                <p className="text-[13px] font-semibold text-[#1D1D1F]">
-                  {items.length} {items.length === 1 ? 'item encontrado' : 'itens encontrados'} — revise e confirme
-                </p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle size={16} className={items.length > 0 ? 'text-[#34C759]' : 'text-[#FF9500]'} />
+                  <p className="text-[13px] font-semibold text-[#1D1D1F]">
+                    {items.length > 0
+                      ? `${items.length} ${items.length === 1 ? 'item encontrado' : 'itens encontrados'} — revise e confirme`
+                      : 'Nenhum item reconhecido automaticamente'}
+                  </p>
+                </div>
+                <button onClick={() => setShowRaw((v) => !v)}
+                  className="text-[11px] text-[#0071E3] hover:underline flex-shrink-0">
+                  {showRaw ? 'ocultar texto' : 'ver texto bruto'}
+                </button>
+              </div>
+
+              {/* Raw text panel */}
+              {showRaw && (
+                <div className="bg-[#F2F2F7] rounded-xl p-3 max-h-36 overflow-y-auto">
+                  <p className="text-[10px] font-mono text-[#6E6E73] whitespace-pre-wrap leading-relaxed">{rawText || '(vazio)'}</p>
+                </div>
+              )}
+
+              {/* Manual add */}
+              <div className="flex gap-2">
+                <input
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addManualItem()}
+                  placeholder="Adicionar item manualmente…"
+                  className="flex-1 bg-[#F2F2F7] rounded-xl px-3 py-2 text-[13px] text-[#1D1D1F] placeholder-[#AEAEB2] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/25 border-0"
+                />
+                <button onClick={addManualItem} disabled={!manualName.trim()}
+                  className="px-3 py-2 bg-[#0071E3] text-white text-[13px] font-medium rounded-xl disabled:opacity-40 transition-colors hover:bg-[#0077ED]">
+                  +
+                </button>
               </div>
 
               <div className="space-y-2.5">
