@@ -262,26 +262,25 @@ function DetailModal({ item, onClose, onEdit, onDelete, currentUser, adjustStock
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider mb-2.5">Ajustar Estoque</p>
-            <div className="flex items-center gap-2 mb-3">
-              <input
-                type="number"
-                min={1}
-                placeholder="1"
-                value={adjQty}
-                onChange={e => setAdjQty(e.target.value)}
-                className="flex-1 text-center bg-apple-bg border border-apple-border rounded-apple py-2.5 text-lg font-semibold text-apple-text placeholder:text-apple-text-3 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-apple-blue/40 focus:border-apple-blue transition-all"
-              />
-            </div>
+            <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider mb-1.5">Ajustar Estoque</p>
+            <p className="text-xs text-apple-text-3 mb-2.5">Digite a quantidade a ser adicionada ou retirada</p>
+            <input
+              type="number"
+              min={1}
+              placeholder="Quantidade"
+              value={adjQty}
+              onChange={e => setAdjQty(e.target.value)}
+              className="w-full text-center bg-apple-bg border border-apple-border rounded-apple py-2.5 text-base text-apple-text placeholder:text-apple-text-3 focus:outline-none focus:ring-2 focus:ring-apple-blue/40 focus:border-apple-blue transition-all mb-3"
+            />
             <div className="flex gap-3">
               <button onClick={() => { const n = Math.max(1, Number(adjQty) || 1); adjustStock(item.id, -n); }}
                 disabled={item.quantity - Math.max(1, Number(adjQty)||1) < item.inUse}
                 className="flex-1 flex items-center justify-center gap-2 border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                <Minus size={15} /> Retirar {adjQty || 1}
+                <Minus size={15} /> Retirar
               </button>
               <button onClick={() => { const n = Math.max(1, Number(adjQty) || 1); adjustStock(item.id, n); }}
                 className="flex-1 flex items-center justify-center gap-2 border border-apple-blue/40 text-apple-blue py-2.5 rounded-apple text-sm font-medium hover:bg-apple-blue/5 transition-colors">
-                <Plus size={15} /> Adicionar {adjQty || 1}
+                <Plus size={15} /> Adicionar
               </button>
             </div>
           </div>
