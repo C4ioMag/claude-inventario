@@ -60,22 +60,60 @@ export function exportHistoricoPDF(outings, getPurchases, filtersObj) {
     doc.text(`${outing.person}`, 14, y);
     doc.setFontSize(9);
     doc.setTextColor(80, 80, 80);
-    const status = outing.status === 'active' ? 'Em campo' : 'Encerrado';
+    const hasPending = outing.pendingItems?.length > 0;
+    const statusLabel = outing.status === 'active'
+      ? 'Em campo'
+      : hasPending ? 'Encerrado com pendência' : 'Encerrado';
+    const retornoStr = outing.endDate
+      ? ` | Retorno: ${new Date(outing.endDate + 'T12:00:00').toLocaleDateString('pt-BR')}`
+      : '';
     doc.text(
-      `Saída: ${new Date(outing.startDate + 'T12:00:00').toLocaleDateString('pt-BR')} | Status: ${status}`,
+      `Saída: ${new Date(outing.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}${retornoStr} | Status: ${statusLabel}`,
       14, y + 5
     );
     y += 10;
 
     autoTable(doc, {
       startY: y,
-      head: [['Item', 'Retirado']],
-      body: outing.items.map((i) => [i.name, i.taken]),
+      head: [['Item', 'Retirado', 'Devolvido', 'Pendência']],
+      body: outing.items.map((i) => {
+        const missing = i.taken - i.returned;
+        const hasMissing = missing > 0 && outing.status === 'closed';
+        return [
+          i.name,
+          i.taken,
+          outing.status === 'closed' ? i.returned : '—',
+          hasMissing ? `⚠ ${missing} não devolvido(s)` : outing.status === 'closed' ? '✓ ok' : '—',
+        ];
+      }),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [100, 116, 139] },
       margin: { left: 14 },
+      didParseCell: (data) => {
+        if (data.column.index === 3 && typeof data.cell.raw === 'string' && data.cell.raw.startsWith('⚠')) {
+          data.cell.styles.textColor = [220, 53, 69];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
     });
     y = doc.lastAutoTable.finalY + 4;
+
+    // Bloco de pendências destacado
+    if (hasPending) {
+      doc.setFontSize(9);
+      doc.setTextColor(220, 53, 69);
+      doc.text('Itens não devolvidos (pendência registrada):', 14, y);
+      y += 4;
+      autoTable(doc, {
+        startY: y,
+        head: [['Item', 'Qtd não devolvida']],
+        body: outing.pendingItems.map((i) => [i.name, i.missing]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [220, 53, 69] },
+        margin: { left: 14 },
+      });
+      y = doc.lastAutoTable.finalY + 4;
+    }
 
     const purchases = getPurchases(outing.id);
     if (purchases.length > 0) {

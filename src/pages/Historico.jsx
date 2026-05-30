@@ -147,7 +147,13 @@ export default function Historico() {
     const matchFrom = !dateFrom || o.startDate >= dateFrom;
     const matchTo = !dateTo || o.startDate <= dateTo;
     return matchName && matchStatus && matchFrom && matchTo;
-  }).sort((a, b) => b.startDate.localeCompare(a.startDate));
+  }).sort((a, b) => {
+    // Finalizados: ordena por data de fim (mais recente primeiro)
+    // Em campo: aparecem por último, ordenados por data de saída
+    const aKey = a.endDate || '0000-00-00';
+    const bKey = b.endDate || '0000-00-00';
+    return bKey.localeCompare(aKey) || b.startDate.localeCompare(a.startDate);
+  });
 
   const inputClass = "bg-apple-bg border border-apple-border rounded-apple px-3 py-2 text-sm text-apple-text focus:outline-none focus:ring-2 focus:ring-apple-blue/40 focus:border-apple-blue transition-all";
 
