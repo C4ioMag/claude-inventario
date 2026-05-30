@@ -22,57 +22,65 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-apple-bg flex items-center justify-center p-4">
+    <div className="min-h-screen bg-apple-bg flex items-center justify-center p-4"
+      style={{background: 'linear-gradient(160deg, #F2F2F7 0%, #E8EAF0 100%)'}}>
+
       {/* Background blobs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-apple-blue/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-purple-500/8 rounded-full blur-3xl" />
+        <div className="absolute -top-60 -right-60 w-[600px] h-[600px] rounded-full opacity-40"
+          style={{background: 'radial-gradient(circle, rgba(0,113,227,0.12) 0%, transparent 70%)'}} />
+        <div className="absolute -bottom-60 -left-60 w-[500px] h-[500px] rounded-full opacity-30"
+          style={{background: 'radial-gradient(circle, rgba(94,92,230,0.10) 0%, transparent 70%)'}} />
       </div>
 
-      <div className="w-full max-w-sm relative">
-        {/* Card */}
-        <div className="bg-apple-card rounded-apple-xl shadow-apple-xl p-8">
+      <div className="w-full max-w-[360px] relative">
+        <div className="bg-white rounded-[24px] p-8" style={{boxShadow: '0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)'}}>
+
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-apple-blue rounded-[20px] flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 shadow-apple">
-              FO
+            <div className="w-[64px] h-[64px] rounded-[18px] flex items-center justify-center mx-auto mb-5"
+              style={{background: 'linear-gradient(135deg, #0071E3 0%, #005BB5 100%)', boxShadow: '0 4px 16px rgba(0,113,227,0.40)'}}>
+              <span className="text-white text-[22px] font-bold tracking-tight">FO</span>
             </div>
-            <h1 className="text-apple-text text-2xl font-semibold tracking-tight">Bem-vindo</h1>
-            <p className="text-apple-text-2 text-sm mt-1">Controle de Inventário — Fibra Ótica</p>
+            <h1 className="text-[#1D1D1F] text-[22px] font-bold tracking-tight">Bem-vindo</h1>
+            <p className="text-[#6E6E73] text-[14px] mt-1.5">Controle de Inventário · Fibra Ótica</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="block text-apple-text text-sm font-medium mb-1.5">Email</label>
+              <label className="block text-[#1D1D1F] text-[13px] font-medium mb-1.5 ml-0.5">Email</label>
               <input
                 type="email" required
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="seu@email.com"
-                className="w-full bg-apple-bg border border-apple-border rounded-apple px-3.5 py-2.5 text-sm text-apple-text placeholder:text-apple-text-3 focus:outline-none focus:ring-2 focus:ring-apple-blue/40 focus:border-apple-blue transition-all"
+                className="input-apple w-full"
               />
             </div>
             <div>
-              <label className="block text-apple-text text-sm font-medium mb-1.5">Senha</label>
+              <label className="block text-[#1D1D1F] text-[13px] font-medium mb-1.5 ml-0.5">Senha</label>
               <input
                 type="password" required
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 placeholder="••••••••"
-                className="w-full bg-apple-bg border border-apple-border rounded-apple px-3.5 py-2.5 text-sm text-apple-text placeholder:text-apple-text-3 focus:outline-none focus:ring-2 focus:ring-apple-blue/40 focus:border-apple-blue transition-all"
+                className="input-apple w-full"
               />
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-apple px-3.5 py-2.5">
-                <p className="text-red-600 text-sm">{error}</p>
+              <div className="bg-[#FFF2F1] rounded-xl px-4 py-3">
+                <p className="text-[#FF3B30] text-[13px] font-medium">{error}</p>
               </div>
             )}
 
             <button type="submit" disabled={loading}
-              className="w-full bg-apple-blue hover:bg-apple-blue-hover text-white font-semibold py-2.5 rounded-apple text-sm transition-all shadow-apple disabled:opacity-70 mt-2"
-            >
-              {loading ? 'Entrando...' : 'Entrar'}
+              className="w-full text-white text-[15px] font-semibold py-3 rounded-xl transition-all duration-200 disabled:opacity-60 mt-2 active:scale-[0.98]"
+              style={{
+                background: loading ? '#5BA3F5' : 'linear-gradient(180deg, #0071E3 0%, #0062C9 100%)',
+                boxShadow: loading ? 'none' : '0 2px 8px rgba(0,113,227,0.35)',
+              }}>
+              {loading ? 'Entrando…' : 'Entrar'}
             </button>
           </form>
         </div>
