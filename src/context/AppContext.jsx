@@ -147,19 +147,28 @@ export function AppProvider({ children }) {
   }
 
   function registerReturn(outingId, returnedItems, returnedBy, returnDate, forceClose = false) {
+    // Compute everything up-front from current state — no stale closures.
+    const outing = outings.find((o) => o.id === outingId);
+    if (!outing) return;
+
+    const updatedItems = outing.items.map((item) => {
+      const ret = returnedItems.find((r) => r.equipmentId === item.equipmentId);
+      return ret ? { ...item, returned: item.returned + ret.qty } : item;
+    });
+
+    const allReturned = updatedItems.every((i) => i.returned >= i.taken);
+    const shouldClose = allReturned || forceClose;
+
+    // Items that are still missing after this return (only relevant when closing)
+    const pendingItems = shouldClose
+      ? updatedItems
+          .filter((i) => i.returned < i.taken)
+          .map((i) => ({ ...i, missing: i.taken - i.returned }))
+      : [];
+
     setOutings((prev) =>
-      prev.map((o) => {
-        if (o.id !== outingId) return o;
-        const updatedItems = o.items.map((item) => {
-          const ret = returnedItems.find((r) => r.equipmentId === item.equipmentId);
-          return ret ? { ...item, returned: item.returned + ret.qty } : item;
-        });
-        const allReturned = updatedItems.every((i) => i.returned >= i.taken);
-        const shouldClose = allReturned || forceClose;
-        const pendingItems = shouldClose
-          ? updatedItems.filter((i) => i.returned < i.taken).map((i) => ({ ...i, missing: i.taken - i.returned }))
-          : [];
-        return {
+      prev.map((o) =>
+        o.id !== outingId ? o : {
           ...o,
           items: updatedItems,
           status: shouldClose ? 'closed' : 'active',
@@ -167,14 +176,22 @@ export function AppProvider({ children }) {
           returnedBy,
           returnDate,
           pendingItems: pendingItems.length > 0 ? pendingItems : undefined,
-        };
-      })
+        }
+      )
     );
+
     setEquipment((prev) =>
       prev.map((e) => {
-        const ret = returnedItems.find((r) => r.equipmentId === e.id);
-        if (!ret) return e;
-        return { ...e, inUse: Math.max(0, e.inUse - ret.qty) };
+        const ret     = returnedItems.find((r) => r.equipmentId === e.id);
+        const pending = pendingItems.find((p) => p.equipmentId === e.id);
+        if (!ret && !pending) return e;
+        // Returned qty  → reduces inUse
+        // Pending qty   → reduces BOTH inUse AND quantity (item is lost/unaccounted)
+        return {
+          ...e,
+          inUse:    Math.max(0, e.inUse    - (ret?.qty || 0) - (pending?.missing || 0)),
+          quantity: Math.max(0, e.quantity -                   (pending?.missing || 0)),
+        };
       })
     );
   }
@@ -190,15 +207,19 @@ export function AppProvider({ children }) {
     return purchases.filter((p) => p.outingId === outingId);
   }
 
-  // Resolve a not-returned (pending) item from a closed outing.
-  // mode 'returned'  → item finally came back: frees it from "em uso" (volta a disponível)
-  // mode 'writeoff'  → item perdido/baixado: remove do estoque total
-  function resolvePending(outingId, equipmentId, mode = 'returned') {
+  // Resolve a pending (not-returned) item.
+  // At force-close time the item was ALREADY deducted from both inUse AND quantity,
+  // so inventory is always accurate. Resolve only changes the tracking list.
+  //
+  // mode 'returned' → person brought it back → restore quantity (add back to stock)
+  // mode 'dismiss'  → confirmed as lost/written off → just remove from the list (stock already correct)
+  function resolvePending(outingId, equipmentId, mode = 'dismiss') {
     const outing = outings.find((o) => o.id === outingId);
     const pending = outing?.pendingItems?.find((p) => p.equipmentId === equipmentId);
     if (!pending) return;
     const missingQty = pending.missing;
 
+    // Remove from pending list and record resolution
     setOutings((prev) =>
       prev.map((o) => {
         if (o.id !== outingId || !o.pendingItems) return o;
@@ -218,15 +239,15 @@ export function AppProvider({ children }) {
       })
     );
 
-    setEquipment((prev) =>
-      prev.map((e) => {
-        if (e.id !== equipmentId) return e;
-        if (mode === 'writeoff') {
-          return { ...e, quantity: Math.max(0, e.quantity - missingQty), inUse: Math.max(0, e.inUse - missingQty) };
-        }
-        return { ...e, inUse: Math.max(0, e.inUse - missingQty) };
-      })
-    );
+    // Only touch equipment if the item actually came back — restore quantity to stock
+    if (mode === 'returned') {
+      setEquipment((prev) =>
+        prev.map((e) =>
+          e.id === equipmentId ? { ...e, quantity: e.quantity + missingQty } : e
+        )
+      );
+    }
+    // mode 'dismiss': quantity already correct (deducted at force-close), nothing to change
   }
 
   const activeOutings = outings.filter((o) => o.status === 'active');

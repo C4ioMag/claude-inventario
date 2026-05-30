@@ -23,8 +23,11 @@ function ResolveModal({ item, onResolve, onClose }) {
       <div className="bg-white rounded-[20px] w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}
         style={{boxShadow: '0 24px 64px rgba(0,0,0,0.18)'}}>
         <h2 className="text-[17px] font-semibold text-[#1D1D1F] mb-1">Resolver pendência</h2>
-        <p className="text-[13px] text-[#6E6E73] mb-5">
-          <strong className="text-[#1D1D1F]">{item.name}</strong> · {item.missing} un. não devolvida(s) por <strong className="text-[#1D1D1F]">{item.person}</strong>
+        <p className="text-[13px] text-[#6E6E73] mb-1">
+          <strong className="text-[#1D1D1F]">{item.name}</strong> · {item.missing} un. · {item.person}
+        </p>
+        <p className="text-[12px] text-[#AEAEB2] mb-5">
+          Estes itens já foram removidos do estoque total quando o retorno foi finalizado.
         </p>
         <div className="space-y-2.5">
           <button onClick={() => onResolve('returned')}
@@ -33,18 +36,18 @@ function ResolveModal({ item, onResolve, onClose }) {
               <RotateCcw size={15} className="text-[#34C759]" />
             </span>
             <span>
-              <span className="block text-[14px] font-medium text-[#1D1D1F]">Foi devolvido agora</span>
-              <span className="block text-[12px] text-[#6E6E73]">Volta para o estoque disponível</span>
+              <span className="block text-[14px] font-medium text-[#1D1D1F]">Item foi devolvido</span>
+              <span className="block text-[12px] text-[#6E6E73]">Adiciona de volta ao estoque disponível</span>
             </span>
           </button>
-          <button onClick={() => onResolve('writeoff')}
+          <button onClick={() => onResolve('dismiss')}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#E5E5EA] hover:bg-[#FFF2F1] transition-colors text-left">
             <span className="w-8 h-8 rounded-lg bg-[#FFF2F1] flex items-center justify-center flex-shrink-0">
               <Trash2 size={15} className="text-[#FF3B30]" />
             </span>
             <span>
-              <span className="block text-[14px] font-medium text-[#1D1D1F]">Dar baixa (perda)</span>
-              <span className="block text-[12px] text-[#6E6E73]">Remove do total do inventário</span>
+              <span className="block text-[14px] font-medium text-[#1D1D1F]">Confirmar como perda</span>
+              <span className="block text-[12px] text-[#6E6E73]">Remove da lista — estoque já está correto</span>
             </span>
           </button>
         </div>
