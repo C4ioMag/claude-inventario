@@ -285,17 +285,11 @@ function DetailModal({ item, onClose, onEdit, onDelete, currentUser, adjustStock
             </div>
           </div>
 
-          <div className="flex gap-3 pt-1 border-t border-apple-border">
+          <div className="pt-1 border-t border-apple-border">
             <button onClick={() => { onClose(); onEdit(item); }}
-              className="flex-1 flex items-center justify-center gap-2 bg-apple-bg border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-border/30 transition-colors">
+              className="w-full flex items-center justify-center gap-2 bg-apple-bg border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-border/30 transition-colors">
               <Pencil size={14} /> Editar
             </button>
-            {currentUser?.role === 'admin' && (
-              <button onClick={() => { onClose(); onDelete(item); }}
-                className="flex-1 flex items-center justify-center gap-2 border border-apple-red/30 text-apple-red py-2.5 rounded-apple text-sm font-medium hover:bg-apple-red/5 transition-colors">
-                <Trash2 size={14} /> Excluir
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -452,17 +446,11 @@ export default function Equipment() {
                   </div>
                 </div>
 
-                <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => setEditTarget(item)}
-                    className="flex-1 flex items-center justify-center gap-1 bg-apple-bg border border-apple-border text-apple-text-2 py-1.5 rounded-apple text-xs font-medium hover:bg-apple-border/30 transition-colors">
+                    className="w-full flex items-center justify-center gap-1 bg-apple-bg border border-apple-border text-apple-text-2 py-1.5 rounded-apple text-xs font-medium hover:bg-apple-border/30 transition-colors">
                     <Pencil size={12} /> Editar
                   </button>
-                  {currentUser?.role === 'admin' && (
-                    <button onClick={() => setDeleteTarget(item)}
-                      className="flex items-center justify-center px-3 border border-apple-red/25 text-apple-red py-1.5 rounded-apple text-xs hover:bg-apple-red/5 transition-colors">
-                      <Trash2 size={12} />
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
