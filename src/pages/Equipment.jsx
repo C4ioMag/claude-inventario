@@ -1,9 +1,36 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES } from '../data/initialData';
-import { Plus, Minus, Trash2, Search, FileDown, Pencil, X, Settings, ScanLine, Package } from 'lucide-react';
+import { Plus, Minus, Trash2, Search, FileDown, Pencil, X, Settings, ScanLine, Package, RotateCcw, Flame } from 'lucide-react';
 import { exportEquipmentPDF } from '../utils/pdf';
 import ReceiptScanner from '../components/ReceiptScanner';
+
+function TypeToggle({ value, onChange }) {
+  return (
+    <div>
+      <label className="block text-[13px] font-medium text-[#1D1D1F] mb-1.5 ml-0.5">Tipo de item</label>
+      <div className="flex rounded-xl overflow-hidden border border-[#E5E5EA]">
+        <button type="button" onClick={() => onChange('returnable')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[13px] font-medium transition-colors ${
+            value !== 'consumable' ? 'bg-[#0071E3] text-white' : 'bg-white text-[#6E6E73] hover:bg-[#F2F2F7]'
+          }`}>
+          <RotateCcw size={13} /> Retornável
+        </button>
+        <button type="button" onClick={() => onChange('consumable')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[13px] font-medium transition-colors border-l border-[#E5E5EA] ${
+            value === 'consumable' ? 'bg-[#FF3B30] text-white' : 'bg-white text-[#6E6E73] hover:bg-[#F2F2F7]'
+          }`}>
+          <Flame size={13} /> Consumível
+        </button>
+      </div>
+      <p className="text-[11px] text-[#AEAEB2] mt-1.5 ml-0.5">
+        {value === 'consumable'
+          ? 'Baixa imediata ao sair — peças, materiais, cabos.'
+          : 'Deve ser devolvido — ferramentas, máquinas, equipamentos.'}
+      </p>
+    </div>
+  );
+}
 
 const MODAL_SHADOW = '0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08)';
 
@@ -150,7 +177,7 @@ function ItemForm({ form, setForm, groups, datalistId }) {
 // ─── Add Modal ─────────────────────────────────────────────────────────────────
 function AddModal({ defaultGroupId, onClose }) {
   const { addEquipment, groups } = useApp();
-  const [form, setForm] = useState({ name: '', description: '', category: '', quantity: 1, photo: null, groupId: defaultGroupId || groups[0]?.id || 'campo' });
+  const [form, setForm] = useState({ name: '', description: '', category: '', quantity: 1, photo: null, groupId: defaultGroupId || groups[0]?.id || 'campo', type: 'returnable' });
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -163,6 +190,7 @@ function AddModal({ defaultGroupId, onClose }) {
       <ModalHeader title="Adicionar Equipamento" onClose={onClose} />
       <form onSubmit={handleSubmit} className="p-6 space-y-4">
         <PhotoInput current={null} onChange={v => setForm(f => ({...f, photo: v}))} />
+        <TypeToggle value={form.type} onChange={v => setForm(f => ({...f, type: v}))} />
         <ItemForm form={form} setForm={setForm} groups={groups} datalistId="cats-add" />
         <div>
           <Label>Quantidade inicial</Label>
@@ -190,6 +218,7 @@ function EditModal({ item, onClose, onDelete, currentUser }) {
   const [form, setForm] = useState({
     name: item.name, description: item.description || '',
     category: item.category || '', photo: item.photo || null, groupId: item.groupId || 'campo',
+    type: item.type || 'returnable',
   });
 
   function handleSubmit(e) {
@@ -203,6 +232,7 @@ function EditModal({ item, onClose, onDelete, currentUser }) {
       <ModalHeader title={`Editar — ${item.name}`} onClose={onClose} />
       <form onSubmit={handleSubmit} className="p-6 space-y-4">
         <PhotoInput current={form.photo} onChange={v => setForm(f => ({...f, photo: v}))} />
+        <TypeToggle value={form.type} onChange={v => setForm(f => ({...f, type: v}))} />
         <ItemForm form={form} setForm={setForm} groups={groups} datalistId="cats-edit" />
         <div className="flex gap-3 pt-2">
           <button type="button" onClick={onClose}
@@ -397,7 +427,18 @@ function EquipCard({ item, onClick }) {
 
       {/* Info */}
       <div className="p-4">
-        <h3 className="text-[14px] font-semibold text-[#1D1D1F] leading-tight truncate">{item.name}</h3>
+        <div className="flex items-start justify-between gap-2 mb-0.5">
+          <h3 className="text-[14px] font-semibold text-[#1D1D1F] leading-tight truncate">{item.name}</h3>
+          {item.type === 'consumable' ? (
+            <span className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#FFF2F1] text-[#FF3B30]">
+              <Flame size={9} /> Consumível
+            </span>
+          ) : (
+            <span className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#EAF4FF] text-[#0071E3]">
+              <RotateCcw size={9} /> Retornável
+            </span>
+          )}
+        </div>
         {item.description && (
           <p className="text-[12px] text-[#AEAEB2] mt-0.5 line-clamp-1">{item.description}</p>
         )}
@@ -409,11 +450,15 @@ function EquipCard({ item, onClick }) {
             <p className="text-[10px] text-[#AEAEB2] font-medium mt-1 uppercase tracking-wide">Total</p>
           </div>
           <div className="w-px bg-[#F2F2F7]" />
-          <div className="flex-1 text-center">
-            <p className="text-[18px] font-bold text-[#FF9500] leading-none tabular-nums">{item.inUse}</p>
-            <p className="text-[10px] text-[#AEAEB2] font-medium mt-1 uppercase tracking-wide">Em uso</p>
-          </div>
-          <div className="w-px bg-[#F2F2F7]" />
+          {item.type !== 'consumable' && (
+            <>
+              <div className="flex-1 text-center">
+                <p className="text-[18px] font-bold text-[#FF9500] leading-none tabular-nums">{item.inUse}</p>
+                <p className="text-[10px] text-[#AEAEB2] font-medium mt-1 uppercase tracking-wide">Em uso</p>
+              </div>
+              <div className="w-px bg-[#F2F2F7]" />
+            </>
+          )}
           <div className="flex-1 text-center">
             <p className={`text-[18px] font-bold leading-none tabular-nums ${available === 0 ? 'text-[#FF3B30]' : 'text-[#34C759]'}`}>{available}</p>
             <p className="text-[10px] text-[#AEAEB2] font-medium mt-1 uppercase tracking-wide">Livre</p>

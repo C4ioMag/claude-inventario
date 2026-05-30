@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import { RotateCcw, Flame } from 'lucide-react';
 
 function today() { return new Date().toISOString().split('T')[0]; }
 
@@ -11,6 +12,21 @@ function Step({ n, active, done }) {
     }`}>
       {done ? '✓' : n}
     </div>
+  );
+}
+
+function TypeBadge({ type }) {
+  if (type === 'consumable') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#FFF2F1] text-[#FF3B30]">
+        <Flame size={9} /> Consumível
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#EAF4FF] text-[#0071E3]">
+      <RotateCcw size={9} /> Retornável
+    </span>
   );
 }
 
@@ -33,8 +49,15 @@ export default function Saida() {
     .map(e => ({ ...e, qty: quantities[e.id] || 0, available: e.quantity - e.inUse }))
     .filter(e => e.qty > 0);
 
+  const returnableSelected = selectedItems.filter(i => i.type !== 'consumable');
+  const consumableSelected = selectedItems.filter(i => i.type === 'consumable');
+
   function handleConfirm() {
-    createOuting(person, date, selectedItems.map(i => ({ equipmentId: i.id, name: i.name, qty: i.qty })));
+    createOuting(
+      person,
+      date,
+      selectedItems.map(i => ({ equipmentId: i.id, name: i.name, qty: i.qty, type: i.type || 'returnable' }))
+    );
     navigate('/campo');
   }
 
@@ -81,6 +104,14 @@ export default function Saida() {
 
       {step === 2 && (
         <div className="space-y-3">
+          {/* Legend */}
+          <div className="flex items-center gap-3 px-1">
+            <TypeBadge type="returnable" />
+            <span className="text-[11px] text-apple-text-2">deve voltar</span>
+            <TypeBadge type="consumable" />
+            <span className="text-[11px] text-apple-text-2">baixa imediata do estoque</span>
+          </div>
+
           {categories.map(cat => {
             const items = equipment.filter(e => e.category === cat);
             return (
@@ -92,11 +123,17 @@ export default function Saida() {
                   {items.map(item => {
                     const available = item.quantity - item.inUse;
                     const qty = quantities[item.id] || 0;
+                    const isConsumable = item.type === 'consumable';
                     return (
                       <div key={item.id} className={`flex items-center gap-3 px-4 py-3 ${available === 0 ? 'opacity-35' : ''}`}>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-apple-text truncate">{item.name}</p>
-                          <p className="text-xs text-apple-text-2">Disponível: {available}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-apple-text truncate">{item.name}</p>
+                            <TypeBadge type={item.type || 'returnable'} />
+                          </div>
+                          <p className="text-xs text-apple-text-2 mt-0.5">
+                            {isConsumable ? `Disponível: ${available}` : `Disponível: ${available} · em uso: ${item.inUse}`}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button onClick={() => setQty(item.id, qty - 1, available)} disabled={qty === 0}
@@ -138,15 +175,40 @@ export default function Saida() {
                 <p className="font-semibold text-apple-text mt-0.5">{new Date(date+'T12:00:00').toLocaleDateString('pt-BR')}</p>
               </div>
             </div>
-            <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider mb-3">Itens selecionados</p>
-            <div className="space-y-1">
-              {selectedItems.map(i => (
-                <div key={i.id} className="flex justify-between items-center py-2 border-b border-apple-border last:border-0">
-                  <span className="text-sm text-apple-text">{i.name}</span>
-                  <span className="text-sm font-semibold text-apple-text bg-apple-bg px-2.5 py-0.5 rounded-full">{i.qty} un.</span>
+
+            {returnableSelected.length > 0 && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <TypeBadge type="returnable" />
+                  <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider">Retornáveis (devem voltar)</p>
                 </div>
-              ))}
-            </div>
+                <div className="space-y-1 mb-4">
+                  {returnableSelected.map(i => (
+                    <div key={i.id} className="flex justify-between items-center py-2 border-b border-apple-border last:border-0">
+                      <span className="text-sm text-apple-text">{i.name}</span>
+                      <span className="text-sm font-semibold text-apple-text bg-apple-bg px-2.5 py-0.5 rounded-full">{i.qty} un.</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {consumableSelected.length > 0 && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <TypeBadge type="consumable" />
+                  <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider">Consumíveis (baixa imediata)</p>
+                </div>
+                <div className="space-y-1">
+                  {consumableSelected.map(i => (
+                    <div key={i.id} className="flex justify-between items-center py-2 border-b border-apple-border last:border-0">
+                      <span className="text-sm text-apple-text">{i.name}</span>
+                      <span className="text-sm font-semibold text-[#FF3B30] bg-[#FFF2F1] px-2.5 py-0.5 rounded-full">{i.qty} un.</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
           <div className="flex gap-3">
             <button onClick={() => setStep(2)} className="flex-1 bg-apple-bg border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-border/30 transition-colors">Voltar</button>

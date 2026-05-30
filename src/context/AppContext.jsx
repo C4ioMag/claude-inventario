@@ -23,10 +23,14 @@ function saveStorage(key, value) {
 function initEquipment() {
   const existing = loadStorage('equipment', null);
   if (existing) {
-    // migrate: add groupId to old items that don't have it
-    return existing.map((e) => e.groupId ? e : { ...e, groupId: 'campo' });
+    // migrate: add groupId + type to old items
+    return existing.map((e) => ({
+      ...e,
+      groupId: e.groupId || 'campo',
+      type: e.type || 'returnable',
+    }));
   }
-  const equipment = INITIAL_EQUIPMENT.map((e) => ({ id: generateId(), ...e, inUse: 0, photo: null }));
+  const equipment = INITIAL_EQUIPMENT.map((e) => ({ id: generateId(), type: 'returnable', ...e, inUse: 0, photo: null }));
   saveStorage('equipment', equipment);
   return equipment;
 }
@@ -103,7 +107,7 @@ export function AppProvider({ children }) {
 
   // EQUIPMENT
   function addEquipment(item) {
-    setEquipment((prev) => [...prev, { id: generateId(), inUse: 0, groupId: 'campo', ...item }]);
+    setEquipment((prev) => [...prev, { id: generateId(), inUse: 0, groupId: 'campo', type: 'returnable', ...item }]);
   }
 
   function updateEquipment(id, changes) {
@@ -125,6 +129,9 @@ export function AppProvider({ children }) {
   }
 
   // OUTINGS
+  // items: [{ equipmentId, name, qty, type }]
+  // Returnable  → tracked in inUse, must come back via Retorno
+  // Consumable  → deducted from quantity immediately, returned=taken so they skip Retorno
   function createOuting(person, date, items) {
     const id = generateId();
     const outing = {
@@ -133,13 +140,24 @@ export function AppProvider({ children }) {
       startDate: date,
       endDate: null,
       status: 'active',
-      items: items.map((i) => ({ equipmentId: i.equipmentId, name: i.name, taken: i.qty, returned: 0 })),
+      items: items.map((i) => ({
+        equipmentId: i.equipmentId,
+        name: i.name,
+        taken: i.qty,
+        type: i.type || 'returnable',
+        // consumables are marked as already returned so they're invisible in Retorno
+        returned: i.type === 'consumable' ? i.qty : 0,
+      })),
     };
     setOutings((prev) => [...prev, outing]);
     setEquipment((prev) =>
       prev.map((e) => {
         const item = items.find((i) => i.equipmentId === e.id);
         if (!item) return e;
+        if (item.type === 'consumable') {
+          // consumed immediately — reduce stock, don't touch inUse
+          return { ...e, quantity: Math.max(0, e.quantity - item.qty) };
+        }
         return { ...e, inUse: e.inUse + item.qty };
       })
     );
