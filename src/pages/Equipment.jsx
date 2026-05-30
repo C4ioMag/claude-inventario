@@ -209,7 +209,7 @@ function EditModal({ item, onClose }) {
 function DetailModal({ item, onClose, onEdit, onDelete, currentUser, adjustStock }) {
   const available = item.quantity - item.inUse;
   const pct = item.quantity > 0 ? Math.round((item.inUse / item.quantity) * 100) : 0;
-  const [adjQty, setAdjQty] = useState(1);
+  const [adjQty, setAdjQty] = useState('');
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -264,21 +264,24 @@ function DetailModal({ item, onClose, onEdit, onDelete, currentUser, adjustStock
           <div>
             <p className="text-xs font-semibold text-apple-text-2 uppercase tracking-wider mb-2.5">Ajustar Estoque</p>
             <div className="flex items-center gap-2 mb-3">
-              <button onClick={() => setAdjQty(q => Math.max(1, q - 1))}
-                className="w-10 h-10 border border-apple-border rounded-apple bg-apple-bg flex items-center justify-center text-apple-text text-xl font-light hover:bg-apple-border/30 disabled:opacity-30 transition-colors flex-shrink-0"
-                disabled={adjQty <= 1}>−</button>
-              <div className="flex-1 text-center py-2 text-2xl font-semibold text-apple-text select-none">{adjQty}</div>
-              <button onClick={() => setAdjQty(q => q + 1)}
-                className="w-10 h-10 bg-apple-blue text-white rounded-apple flex items-center justify-center text-xl font-light hover:bg-apple-blue-hover transition-colors flex-shrink-0">+</button>
+              <input
+                type="number"
+                min={1}
+                placeholder="1"
+                value={adjQty}
+                onChange={e => setAdjQty(e.target.value)}
+                className="flex-1 text-center bg-apple-bg border border-apple-border rounded-apple py-2.5 text-lg font-semibold text-apple-text placeholder:text-apple-text-3 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-apple-blue/40 focus:border-apple-blue transition-all"
+              />
             </div>
             <div className="flex gap-3">
-              <button onClick={() => { adjustStock(item.id, -adjQty); }} disabled={item.quantity - adjQty < item.inUse}
+              <button onClick={() => { const n = Math.max(1, Number(adjQty) || 1); adjustStock(item.id, -n); }}
+                disabled={item.quantity - Math.max(1, Number(adjQty)||1) < item.inUse}
                 className="flex-1 flex items-center justify-center gap-2 border border-apple-border text-apple-text py-2.5 rounded-apple text-sm font-medium hover:bg-apple-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                <Minus size={15} /> Retirar {adjQty}
+                <Minus size={15} /> Retirar {adjQty || 1}
               </button>
-              <button onClick={() => { adjustStock(item.id, adjQty); }}
+              <button onClick={() => { const n = Math.max(1, Number(adjQty) || 1); adjustStock(item.id, n); }}
                 className="flex-1 flex items-center justify-center gap-2 border border-apple-blue/40 text-apple-blue py-2.5 rounded-apple text-sm font-medium hover:bg-apple-blue/5 transition-colors">
-                <Plus size={15} /> Adicionar {adjQty}
+                <Plus size={15} /> Adicionar {adjQty || 1}
               </button>
             </div>
           </div>
