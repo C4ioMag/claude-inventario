@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { AlertCircle, CheckCircle, TrendingUp, PackageX, UserCheck, RotateCcw, Trash2, X } from 'lucide-react';
 
 function StatCard({ label, value, color }) {
   return (
@@ -11,15 +12,65 @@ function StatCard({ label, value, color }) {
   );
 }
 
+function fmt(d) {
+  return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '';
+}
+
+// Modal para resolver um item não devolvido
+function ResolveModal({ item, onResolve, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-[20px] w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}
+        style={{boxShadow: '0 24px 64px rgba(0,0,0,0.18)'}}>
+        <h2 className="text-[17px] font-semibold text-[#1D1D1F] mb-1">Resolver pendência</h2>
+        <p className="text-[13px] text-[#6E6E73] mb-5">
+          <strong className="text-[#1D1D1F]">{item.name}</strong> · {item.missing} un. não devolvida(s) por <strong className="text-[#1D1D1F]">{item.person}</strong>
+        </p>
+        <div className="space-y-2.5">
+          <button onClick={() => onResolve('returned')}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#E5E5EA] hover:bg-[#F2F2F7] transition-colors text-left">
+            <span className="w-8 h-8 rounded-lg bg-[#E8F8EC] flex items-center justify-center flex-shrink-0">
+              <RotateCcw size={15} className="text-[#34C759]" />
+            </span>
+            <span>
+              <span className="block text-[14px] font-medium text-[#1D1D1F]">Foi devolvido agora</span>
+              <span className="block text-[12px] text-[#6E6E73]">Volta para o estoque disponível</span>
+            </span>
+          </button>
+          <button onClick={() => onResolve('writeoff')}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#E5E5EA] hover:bg-[#FFF2F1] transition-colors text-left">
+            <span className="w-8 h-8 rounded-lg bg-[#FFF2F1] flex items-center justify-center flex-shrink-0">
+              <Trash2 size={15} className="text-[#FF3B30]" />
+            </span>
+            <span>
+              <span className="block text-[14px] font-medium text-[#1D1D1F]">Dar baixa (perda)</span>
+              <span className="block text-[12px] text-[#6E6E73]">Remove do total do inventário</span>
+            </span>
+          </button>
+        </div>
+        <button onClick={onClose} className="w-full mt-4 py-2.5 text-[14px] text-[#6E6E73] font-medium hover:text-[#1D1D1F] transition-colors">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const { equipment } = useApp();
+  const { equipment, pendingReturns, resolvePending, activeOutings } = useApp();
+  const [resolveTarget, setResolveTarget] = useState(null);
 
   const totalItems = equipment.length;
   const totalStock = equipment.reduce((s, e) => s + e.quantity, 0);
   const totalInUse = equipment.reduce((s, e) => s + e.inUse, 0);
   const totalAvail = equipment.reduce((s, e) => s + (e.quantity - e.inUse), 0);
-  const outOfStock = equipment.filter((e) => e.quantity - e.inUse === 0).length;
   const lowStock   = equipment.filter((e) => e.quantity - e.inUse <= 1);
+  const totalPending = pendingReturns.reduce((s, p) => s + p.missing, 0);
+
+  function handleResolve(mode) {
+    resolvePending(resolveTarget.outingId, resolveTarget.equipmentId, mode);
+    setResolveTarget(null);
+  }
 
   return (
     <div className="space-y-8">
@@ -31,9 +82,57 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Itens Cadastrados" value={totalItems} color="text-[#1D1D1F]" />
         <StatCard label="Total em Estoque"  value={totalStock} color="text-[#1D1D1F]" />
-        <StatCard label="Em Uso"            value={totalInUse} color="text-[#FF9500]" />
         <StatCard label="Disponível"        value={totalAvail} color="text-[#34C759]" />
-        <StatCard label="Sem Estoque"       value={outOfStock} color="text-[#FF3B30]" />
+        <StatCard label="Pessoas em Campo"  value={activeOutings.length} color="text-[#0071E3]" />
+        <StatCard label="Não Devolvidos"    value={totalPending} color={totalPending > 0 ? 'text-[#FF3B30]' : 'text-[#1D1D1F]'} />
+      </div>
+
+      {/* Itens não devolvidos — destaque */}
+      <div className="bg-white rounded-[18px] overflow-hidden"
+        style={{boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)'}}>
+        <div className="px-6 pt-5 pb-4 flex items-center gap-3 border-b border-[#F2F2F7]">
+          <div className="w-8 h-8 bg-[#FFF2F1] rounded-xl flex items-center justify-center">
+            <PackageX size={15} className="text-[#FF3B30]" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-[15px] font-semibold text-[#1D1D1F]">Itens Não Devolvidos</h2>
+            <p className="text-[12px] text-[#6E6E73]">Pendências de retornos finalizados</p>
+          </div>
+          {totalPending > 0 && (
+            <span className="text-[12px] font-semibold px-2.5 py-1 rounded-full bg-[#FFF2F1] text-[#FF3B30]">
+              {totalPending} un.
+            </span>
+          )}
+        </div>
+        <div className="px-6 py-4">
+          {pendingReturns.length === 0 ? (
+            <div className="flex items-center gap-3 py-3">
+              <CheckCircle size={18} className="text-[#34C759]" />
+              <p className="text-[14px] text-[#6E6E73]">Nenhuma pendência. Todos os itens foram devolvidos.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-[#F2F2F7]">
+              {pendingReturns.map((p) => (
+                <div key={p.outingId + p.equipmentId} className="flex items-center gap-3 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-medium text-[#1D1D1F] truncate">{p.name}</p>
+                    <p className="text-[12px] text-[#6E6E73]">
+                      <UserCheck size={11} className="inline mb-0.5 mr-1" />
+                      {p.person} · finalizado {fmt(p.endDate)}
+                    </p>
+                  </div>
+                  <span className="text-[12px] font-semibold px-2.5 py-1 rounded-full bg-[#FFF2F1] text-[#FF3B30] flex-shrink-0">
+                    {p.missing} un.
+                  </span>
+                  <button onClick={() => setResolveTarget(p)}
+                    className="text-[12px] font-medium text-[#0071E3] hover:underline flex-shrink-0">
+                    Resolver
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-5">
@@ -102,6 +201,10 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {resolveTarget && (
+        <ResolveModal item={resolveTarget} onResolve={handleResolve} onClose={() => setResolveTarget(null)} />
+      )}
     </div>
   );
 }

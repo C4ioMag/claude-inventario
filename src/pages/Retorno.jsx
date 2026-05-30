@@ -218,7 +218,7 @@ function ReturnModal({ outing, onClose }) {
                   <button onClick={() => handleConfirm(true)}
                     className="w-full flex items-center justify-center gap-2 bg-apple-orange text-white py-2.5 rounded-apple text-sm font-semibold hover:opacity-90 shadow-apple transition-all">
                     <AlertTriangle size={15} /> Finalizar com pendência
-                    <span className="text-xs font-normal ml-1">(registrar falta no histórico)</span>
+                    <span className="text-xs font-normal ml-1">(vai para "Itens Não Devolvidos")</span>
                   </button>
                 </>
               )}

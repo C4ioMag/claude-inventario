@@ -190,7 +190,62 @@ export function AppProvider({ children }) {
     return purchases.filter((p) => p.outingId === outingId);
   }
 
+  // Resolve a not-returned (pending) item from a closed outing.
+  // mode 'returned'  → item finally came back: frees it from "em uso" (volta a disponível)
+  // mode 'writeoff'  → item perdido/baixado: remove do estoque total
+  function resolvePending(outingId, equipmentId, mode = 'returned') {
+    const outing = outings.find((o) => o.id === outingId);
+    const pending = outing?.pendingItems?.find((p) => p.equipmentId === equipmentId);
+    if (!pending) return;
+    const missingQty = pending.missing;
+
+    setOutings((prev) =>
+      prev.map((o) => {
+        if (o.id !== outingId || !o.pendingItems) return o;
+        const newPending = o.pendingItems.filter((p) => p.equipmentId !== equipmentId);
+        const updatedItems = o.items.map((it) =>
+          it.equipmentId === equipmentId ? { ...it, returned: it.returned + missingQty } : it
+        );
+        return {
+          ...o,
+          items: updatedItems,
+          pendingItems: newPending.length > 0 ? newPending : undefined,
+          pendingResolved: [
+            ...(o.pendingResolved || []),
+            { equipmentId, name: pending.name, qty: missingQty, mode, date: new Date().toISOString().split('T')[0] },
+          ],
+        };
+      })
+    );
+
+    setEquipment((prev) =>
+      prev.map((e) => {
+        if (e.id !== equipmentId) return e;
+        if (mode === 'writeoff') {
+          return { ...e, quantity: Math.max(0, e.quantity - missingQty), inUse: Math.max(0, e.inUse - missingQty) };
+        }
+        return { ...e, inUse: Math.max(0, e.inUse - missingQty) };
+      })
+    );
+  }
+
   const activeOutings = outings.filter((o) => o.status === 'active');
+
+  // Itens não devolvidos — agregados de todas as saídas encerradas com pendência
+  const pendingReturns = outings
+    .filter((o) => o.status === 'closed' && o.pendingItems?.length > 0)
+    .flatMap((o) =>
+      o.pendingItems.map((i) => ({
+        outingId: o.id,
+        person: o.person,
+        endDate: o.endDate,
+        startDate: o.startDate,
+        equipmentId: i.equipmentId,
+        name: i.name,
+        missing: i.missing,
+      }))
+    )
+    .sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''));
 
   return (
     <AppContext.Provider value={{
@@ -199,6 +254,7 @@ export function AppProvider({ children }) {
       groups, addGroup, deleteGroup, renameGroup,
       equipment, addEquipment, updateEquipment, deleteEquipment, adjustStock,
       outings, activeOutings, createOuting, registerReturn,
+      pendingReturns, resolvePending,
       purchases, addPurchase, getPurchasesForOuting,
     }}>
       {children}
