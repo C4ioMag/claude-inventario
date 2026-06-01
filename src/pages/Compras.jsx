@@ -24,11 +24,20 @@ const ic = 'w-full bg-[#F2F2F7] rounded-xl px-3.5 py-2.5 text-[13px] text-[#1D1D
 
 // ─── New Purchase Modal ────────────────────────────────────────────────────────
 function NewPurchaseModal({ onClose }) {
-  const { equipment, addPurchase } = useApp();
-  const [date, setDate]       = useState(today());
+  const { equipment, addPurchase, activeOutings } = useApp();
+  const [date, setDate]         = useState(today());
+  const [outingId, setOutingId] = useState('');
   const [location, setLocation] = useState('');
-  const [notes, setNotes]     = useState('');
-  const [lines, setLines]     = useState([{ name: '', equipmentId: '', qty: 1, unitPrice: '' }]);
+  const [notes, setNotes]       = useState('');
+  const [lines, setLines]       = useState([{ name: '', equipmentId: '', qty: 1, unitPrice: '' }]);
+
+  function selectSupervisor(id) {
+    setOutingId(id);
+    if (id) {
+      const o = activeOutings.find((o) => o.id === id);
+      if (o?.location) setLocation(o.location);
+    }
+  }
 
   const grandTotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
 
@@ -60,6 +69,7 @@ function NewPurchaseModal({ onClose }) {
     if (!validLines.length) return;
     addPurchase({
       date, location, notes,
+      outingId: outingId || null,
       lines: validLines.map((l) => ({
         equipmentId: l.equipmentId || null,
         name: l.name.trim(),
@@ -86,6 +96,29 @@ function NewPurchaseModal({ onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+
+          {/* Supervisor link */}
+          {activeOutings.length > 0 && (
+            <div>
+              <label className="block text-[12px] font-medium text-[#1D1D1F] mb-1.5">
+                Vincular ao supervisor <span className="text-[#AEAEB2] font-normal">(opcional)</span>
+              </label>
+              <select value={outingId} onChange={(e) => selectSupervisor(e.target.value)} className={ic}>
+                <option value="">— compra geral, sem vínculo —</option>
+                {activeOutings.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.person}{o.location ? ` · ${o.location}` : ''}
+                  </option>
+                ))}
+              </select>
+              {outingId && (
+                <p className="text-[11px] text-[#34C759] mt-1.5 ml-0.5">
+                  ✓ Gasto aparecerá no card do supervisor em "Em Campo"
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-medium text-[#1D1D1F] mb-1.5">Data da compra *</label>
@@ -189,10 +222,13 @@ function NewPurchaseModal({ onClose }) {
 }
 
 // ─── Purchase Row ──────────────────────────────────────────────────────────────
-function PurchaseRow({ purchase, onDelete }) {
+function PurchaseRow({ purchase, onDelete, outings }) {
   const [open, setOpen] = useState(false);
   const linesTotal = (purchase.lines || []).reduce((s, l) => s + (l.qty * (l.unitPrice || 0)), 0);
   const total = purchase.grandTotal ?? linesTotal;
+  const linkedSupervisor = purchase.outingId
+    ? outings.find((o) => o.id === purchase.outingId)
+    : null;
 
   return (
     <div className="border-b border-[#F2F2F7] last:border-0">
@@ -203,11 +239,21 @@ function PurchaseRow({ purchase, onDelete }) {
         {/* Date */}
         <span className="text-[12px] text-[#6E6E73] w-24 flex-shrink-0 tabular-nums">{fmtDate(purchase.date)}</span>
 
-        {/* Location + item preview */}
+        {/* Location + supervisor + item preview */}
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-medium text-[#1D1D1F] truncate">
-            {purchase.location || <span className="text-[#AEAEB2] font-normal">Sem local informado</span>}
-          </p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {purchase.location && (
+              <p className="text-[13px] font-medium text-[#1D1D1F] truncate">{purchase.location}</p>
+            )}
+            {linkedSupervisor && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#EAF4FF] text-[#0071E3] flex-shrink-0">
+                {linkedSupervisor.person}
+              </span>
+            )}
+            {!purchase.location && !linkedSupervisor && (
+              <span className="text-[#AEAEB2] text-[13px] font-normal">Sem local</span>
+            )}
+          </div>
           <p className="text-[11px] text-[#AEAEB2] mt-0.5 truncate">
             {(purchase.lines || []).map((l) => l.name || l.item).filter(Boolean).join(', ')}
           </p>
@@ -271,7 +317,7 @@ function PurchaseRow({ purchase, onDelete }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function Compras() {
-  const { purchases, deletePurchase, equipment } = useApp();
+  const { purchases, deletePurchase, equipment, outings, activeOutings } = useApp();
   const [showNew, setShowNew]       = useState(false);
   const [search, setSearch]         = useState('');
   const [dateFrom, setDateFrom]     = useState('');
@@ -425,7 +471,7 @@ export default function Compras() {
             </p>
           </div>
         ) : (
-          filtered.map((p) => <PurchaseRow key={p.id} purchase={p} onDelete={handleDelete} />)
+          filtered.map((p) => <PurchaseRow key={p.id} purchase={p} onDelete={handleDelete} outings={outings} />)
         )}
       </div>
 

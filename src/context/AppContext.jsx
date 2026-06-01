@@ -132,11 +132,12 @@ export function AppProvider({ children }) {
   // items: [{ equipmentId, name, qty, type }]
   // Returnable  → tracked in inUse, must come back via Retorno
   // Consumable  → deducted from quantity immediately, returned=taken so they skip Retorno
-  function createOuting(person, date, items) {
+  function createOuting(person, date, items, location = '') {
     const id = generateId();
     const outing = {
       id,
       person,
+      location,
       startDate: date,
       endDate: null,
       status: 'active',

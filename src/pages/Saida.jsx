@@ -35,6 +35,7 @@ export default function Saida() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [person, setPerson] = useState('');
+  const [location, setLocation] = useState('');
   const [date, setDate] = useState(today());
   const [quantities, setQuantities] = useState({});
 
@@ -56,7 +57,8 @@ export default function Saida() {
     createOuting(
       person,
       date,
-      selectedItems.map(i => ({ equipmentId: i.id, name: i.name, qty: i.qty, type: i.type || 'returnable' }))
+      selectedItems.map(i => ({ equipmentId: i.id, name: i.name, qty: i.qty, type: i.type || 'returnable' })),
+      location
     );
     navigate('/campo');
   }
@@ -87,12 +89,17 @@ export default function Saida() {
         <div className="bg-apple-card rounded-apple shadow-apple-sm p-6 space-y-4">
           <h2 className="text-apple-text font-semibold">Quem está retirando?</h2>
           <div>
-            <label className="block text-sm font-medium text-apple-text mb-1.5">Nome da pessoa</label>
+            <label className="block text-sm font-medium text-apple-text mb-1.5">Supervisor / Responsável</label>
             <input value={person} onChange={e => setPerson(e.target.value)}
-              placeholder="Nome completo" className={inputClass} />
+              placeholder="Nome do supervisor" className={inputClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-apple-text mb-1.5">Data de retirada</label>
+            <label className="block text-sm font-medium text-apple-text mb-1.5">Local / Job Site</label>
+            <input value={location} onChange={e => setLocation(e.target.value)}
+              placeholder="Ex: Austin TX — Job #42" className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-apple-text mb-1.5">Data de saída</label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} />
           </div>
           <button disabled={!person.trim()} onClick={() => setStep(2)}
@@ -167,13 +174,19 @@ export default function Saida() {
             <h2 className="text-apple-text font-semibold mb-4">Conferência</h2>
             <div className="grid grid-cols-2 gap-3 mb-5">
               <div className="bg-apple-blue/8 rounded-apple p-3">
-                <p className="text-xs text-apple-blue font-medium">Pessoa</p>
+                <p className="text-xs text-apple-blue font-medium">Supervisor</p>
                 <p className="font-semibold text-apple-text mt-0.5">{person}</p>
               </div>
               <div className="bg-apple-blue/8 rounded-apple p-3">
                 <p className="text-xs text-apple-blue font-medium">Data</p>
                 <p className="font-semibold text-apple-text mt-0.5">{new Date(date+'T12:00:00').toLocaleDateString('pt-BR')}</p>
               </div>
+              {location && (
+                <div className="col-span-2 bg-apple-blue/8 rounded-apple p-3">
+                  <p className="text-xs text-apple-blue font-medium">Local / Job Site</p>
+                  <p className="font-semibold text-apple-text mt-0.5">{location}</p>
+                </div>
+              )}
             </div>
 
             {returnableSelected.length > 0 && (
