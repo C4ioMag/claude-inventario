@@ -215,10 +215,63 @@ export function AppProvider({ children }) {
   }
 
   // PURCHASES
+  // lines: [{ equipmentId?, name, qty, unitPrice }]
+  // When equipmentId is set, adds qty to that equipment's stock and updates lastUnitPrice.
   function addPurchase(purchase) {
-    const newPurchase = { id: generateId(), ...purchase };
+    const lines = (purchase.lines || []).map((l) => ({
+      ...l,
+      unitPrice: Number(l.unitPrice) || 0,
+      qty: Number(l.qty) || 1,
+    }));
+    const grandTotal = lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+    const newPurchase = { id: generateId(), ...purchase, lines, grandTotal };
     setPurchases((prev) => [...prev, newPurchase]);
+
+    // Update inventory: add stock + record last price for linked items
+    const updates = {};
+    lines.forEach((l) => {
+      if (!l.equipmentId || !l.qty) return;
+      if (!updates[l.equipmentId]) updates[l.equipmentId] = { qty: 0, unitPrice: 0 };
+      updates[l.equipmentId].qty += l.qty;
+      if (l.unitPrice > 0) updates[l.equipmentId].unitPrice = l.unitPrice;
+    });
+    if (Object.keys(updates).length > 0) {
+      setEquipment((prev) =>
+        prev.map((e) => {
+          const u = updates[e.id];
+          if (!u) return e;
+          return {
+            ...e,
+            quantity: e.quantity + u.qty,
+            lastUnitPrice: u.unitPrice > 0 ? u.unitPrice : (e.lastUnitPrice || 0),
+          };
+        })
+      );
+    }
     return newPurchase.id;
+  }
+
+  function deletePurchase(id) {
+    // Reverse stock changes for linked lines
+    const purchase = purchases.find((p) => p.id === id);
+    if (purchase?.lines) {
+      const updates = {};
+      purchase.lines.forEach((l) => {
+        if (!l.equipmentId || !l.qty) return;
+        if (!updates[l.equipmentId]) updates[l.equipmentId] = 0;
+        updates[l.equipmentId] += l.qty;
+      });
+      if (Object.keys(updates).length > 0) {
+        setEquipment((prev) =>
+          prev.map((e) => {
+            const remove = updates[e.id];
+            if (!remove) return e;
+            return { ...e, quantity: Math.max(e.inUse, e.quantity - remove) };
+          })
+        );
+      }
+    }
+    setPurchases((prev) => prev.filter((p) => p.id !== id));
   }
 
   function getPurchasesForOuting(outingId) {
@@ -294,7 +347,7 @@ export function AppProvider({ children }) {
       equipment, addEquipment, updateEquipment, deleteEquipment, adjustStock,
       outings, activeOutings, createOuting, registerReturn,
       pendingReturns, resolvePending,
-      purchases, addPurchase, getPurchasesForOuting,
+      purchases, addPurchase, deletePurchase, getPurchasesForOuting,
     }}>
       {children}
     </AppContext.Provider>

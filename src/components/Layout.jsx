@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
   LayoutDashboard, Package, LogOut, Menu, X, Users,
-  ArrowUpFromLine, ArrowDownToLine, Clock, UserCheck, Zap,
+  ArrowUpFromLine, ArrowDownToLine, Clock, UserCheck, Zap, ShoppingCart,
 } from 'lucide-react';
 
 const navGroups = [
@@ -12,6 +12,7 @@ const navGroups = [
     items: [
       { to: '/dashboard',  label: 'Visão Geral',  icon: LayoutDashboard, tint: '#0A84FF' },
       { to: '/equipment',  label: 'Equipamentos', icon: Package,          tint: '#5E5CE6' },
+      { to: '/compras',    label: 'Compras',       icon: ShoppingCart,    tint: '#34C759' },
     ],
   },
   {

@@ -8,6 +8,7 @@ import Saida from './pages/Saida';
 import Campo from './pages/Campo';
 import Retorno from './pages/Retorno';
 import Historico from './pages/Historico';
+import Compras from './pages/Compras';
 import Usuarios from './pages/Usuarios';
 
 function ProtectedRoute({ children }) {
@@ -27,6 +28,7 @@ function AppRoutes() {
       <Route path="/campo" element={<ProtectedRoute><Campo /></ProtectedRoute>} />
       <Route path="/retorno" element={<ProtectedRoute><Retorno /></ProtectedRoute>} />
       <Route path="/historico" element={<ProtectedRoute><Historico /></ProtectedRoute>} />
+      <Route path="/compras"   element={<ProtectedRoute><Compras /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={currentUser ? '/dashboard' : '/login'} replace />} />
     </Routes>

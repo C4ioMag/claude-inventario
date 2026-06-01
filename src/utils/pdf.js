@@ -1,6 +1,13 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+function fmtUSD(n) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(n) || 0);
+}
+function fmtDate(d) {
+  return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+}
+
 function header(doc, title, filters) {
   doc.setFontSize(18);
   doc.setTextColor(30, 64, 175);
@@ -140,4 +147,69 @@ export function exportHistoricoPDF(outings, getPurchases, filtersObj) {
   });
 
   doc.save('historico.pdf');
+}
+
+export function exportComprasPDF(purchases, filtersObj = {}) {
+  const doc = new jsPDF();
+  const filterStr = [
+    filtersObj.search   && `Busca: ${filtersObj.search}`,
+    filtersObj.dateFrom && `De: ${filtersObj.dateFrom}`,
+    filtersObj.dateTo   && `Até: ${filtersObj.dateTo}`,
+  ].filter(Boolean).join(', ') || 'Nenhum';
+
+  let y = header(doc, 'Relatório de Compras', filterStr);
+
+  // Summary row
+  const grandTotal = purchases.reduce((s, p) => {
+    const t = p.grandTotal ?? (p.lines || []).reduce((a, l) => a + (l.qty * (l.unitPrice || 0)), 0);
+    return s + t;
+  }, 0);
+  doc.setFontSize(10);
+  doc.setTextColor(60, 60, 60);
+  doc.text(`Total de compras: ${purchases.length}   Valor total: ${fmtUSD(grandTotal)}`, 14, y);
+  y += 8;
+
+  purchases.forEach((p) => {
+    if (y > 250) { doc.addPage(); y = 20; }
+
+    const total = p.grandTotal ?? (p.lines || []).reduce((s, l) => s + (l.qty * (l.unitPrice || 0)), 0);
+
+    doc.setFontSize(10);
+    doc.setTextColor(30, 64, 175);
+    doc.text(`${fmtDate(p.date)}  ${p.supplier || '—'}`, 14, y);
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+    const meta = [
+      p.location    && `Local: ${p.location}`,
+      p.responsible && `Resp.: ${p.responsible}`,
+    ].filter(Boolean).join('   ');
+    if (meta) { doc.text(meta, 14, y + 4); y += 4; }
+    y += 6;
+
+    autoTable(doc, {
+      startY: y,
+      head: [['Item', 'Qtd', 'Preço/un', 'Total']],
+      body: (p.lines || []).map((l) => [
+        l.name || l.item || '—',
+        l.qty,
+        l.unitPrice > 0 ? fmtUSD(l.unitPrice) : '—',
+        l.unitPrice > 0 ? fmtUSD(l.qty * l.unitPrice) : '—',
+      ]),
+      foot: [[{ content: 'Total', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, fmtUSD(total)]],
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [34, 197, 94] },
+      footStyles: { fillColor: [240, 255, 244], textColor: [30, 64, 175], fontStyle: 'bold' },
+      margin: { left: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 6;
+
+    if (p.notes) {
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(`Obs: ${p.notes}`, 14, y);
+      y += 5;
+    }
+  });
+
+  doc.save('compras.pdf');
 }
