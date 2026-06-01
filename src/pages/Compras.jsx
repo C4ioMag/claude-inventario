@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Plus, Search, FileDown, ChevronDown, ChevronUp, X,
   TrendingUp, DollarSign, ShoppingCart, MapPin, Trash2,
-  BarChart2, Calendar, Package,
+  BarChart2, Calendar, Package, Paperclip, Image, FileText, ZoomIn,
 } from 'lucide-react';
 import { exportComprasPDF } from '../utils/pdf';
 
@@ -30,6 +30,8 @@ function NewPurchaseModal({ onClose }) {
   const [location, setLocation] = useState('');
   const [notes, setNotes]       = useState('');
   const [lines, setLines]       = useState([{ name: '', equipmentId: '', qty: 1, unitPrice: '' }]);
+  const [receipt, setReceipt]   = useState(null); // { dataUrl, type, name }
+  const fileRef                 = useRef();
 
   function selectSupervisor(id) {
     setOutingId(id);
@@ -55,6 +57,14 @@ function NewPurchaseModal({ onClose }) {
     }));
   }
 
+  function handleReceiptFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setReceipt({ dataUrl: ev.target.result, type: file.type, name: file.name });
+    reader.readAsDataURL(file);
+  }
+
   function addLine() {
     setLines((prev) => [...prev, { name: '', equipmentId: '', qty: 1, unitPrice: '' }]);
   }
@@ -70,6 +80,7 @@ function NewPurchaseModal({ onClose }) {
     addPurchase({
       date, location, notes,
       outingId: outingId || null,
+      receipt: receipt || null,
       lines: validLines.map((l) => ({
         equipmentId: l.equipmentId || null,
         name: l.name.trim(),
@@ -197,6 +208,50 @@ function NewPurchaseModal({ onClose }) {
             <span className="text-[20px] font-bold text-[#1D1D1F] tabular-nums">{fmtUSD(grandTotal)}</span>
           </div>
 
+          {/* Receipt attachment */}
+          <div>
+            <label className="block text-[12px] font-medium text-[#1D1D1F] mb-1.5">
+              Nota fiscal / Comprovante <span className="text-[#AEAEB2] font-normal">(opcional)</span>
+            </label>
+            {!receipt ? (
+              <button type="button" onClick={() => fileRef.current.click()}
+                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-[#E5E5EA] hover:border-[#0071E3] rounded-xl py-4 text-[13px] text-[#6E6E73] hover:text-[#0071E3] transition-colors">
+                <Paperclip size={15} /> Anexar imagem ou PDF da nota
+              </button>
+            ) : (
+              <div className="border border-[#E5E5EA] rounded-xl overflow-hidden">
+                {receipt.type.startsWith('image/') ? (
+                  <div className="relative">
+                    <img src={receipt.dataUrl} alt="Nota fiscal" className="w-full max-h-48 object-contain bg-[#F2F2F7]" />
+                    <div className="absolute top-2 right-2 flex gap-1.5">
+                      <a href={receipt.dataUrl} target="_blank" rel="noreferrer"
+                        className="w-7 h-7 bg-black/50 rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors">
+                        <ZoomIn size={12} />
+                      </a>
+                      <button type="button" onClick={() => setReceipt(null)}
+                        className="w-7 h-7 bg-black/50 rounded-full flex items-center justify-center text-white hover:bg-[#FF3B30]/80 transition-colors">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 px-4 py-3 bg-[#F2F2F7]">
+                    <FileText size={20} className="text-[#FF3B30] flex-shrink-0" />
+                    <span className="text-[13px] text-[#1D1D1F] flex-1 truncate">{receipt.name}</span>
+                    <a href={receipt.dataUrl} target="_blank" rel="noreferrer"
+                      className="text-[12px] font-medium text-[#0071E3] hover:underline flex-shrink-0">Abrir</a>
+                    <button type="button" onClick={() => setReceipt(null)}
+                      className="text-[#AEAEB2] hover:text-[#FF3B30] transition-colors flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+              onChange={handleReceiptFile} />
+          </div>
+
           <div>
             <label className="block text-[12px] font-medium text-[#1D1D1F] mb-1.5">Observações</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
@@ -270,6 +325,7 @@ function PurchaseRow({ purchase, onDelete, outings }) {
         </span>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {purchase.receipt && <Paperclip size={12} className="text-[#AEAEB2]" />}
           {open ? <ChevronUp size={14} className="text-[#AEAEB2]" /> : <ChevronDown size={14} className="text-[#AEAEB2]" />}
         </div>
       </div>
@@ -299,6 +355,30 @@ function PurchaseRow({ purchase, onDelete, outings }) {
               </div>
             ))}
           </div>
+
+          {/* Receipt */}
+          {purchase.receipt && (
+            <div className="mb-3">
+              <p className="text-[11px] font-semibold text-[#AEAEB2] uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Paperclip size={11} /> Nota fiscal anexada
+              </p>
+              {purchase.receipt.type?.startsWith('image/') ? (
+                <a href={purchase.receipt.dataUrl} target="_blank" rel="noreferrer"
+                  className="block relative group rounded-xl overflow-hidden border border-[#E5E5EA] max-w-xs">
+                  <img src={purchase.receipt.dataUrl} alt="Nota" className="w-full max-h-40 object-contain bg-[#F2F2F7]" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </a>
+              ) : (
+                <a href={purchase.receipt.dataUrl} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-2 bg-white border border-[#E5E5EA] rounded-xl px-4 py-2.5 text-[13px] font-medium text-[#0071E3] hover:border-[#0071E3] transition-colors">
+                  <FileText size={14} className="text-[#FF3B30]" />
+                  {purchase.receipt.name || 'Ver nota fiscal (PDF)'}
+                </a>
+              )}
+            </div>
+          )}
 
           {/* Meta */}
           {purchase.notes && (
