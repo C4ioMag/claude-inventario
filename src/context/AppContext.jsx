@@ -140,6 +140,11 @@ export function AppProvider({ children }) {
           supabase.from('purchases').select('*, purchase_lines(*)').order('created_at'),
         ]);
 
+        // If any query returned an error, fall back to localStorage
+        if (gr.error || eq.error || ot.error || pu.error) {
+          throw new Error(gr.error?.message || eq.error?.message || 'Supabase unavailable');
+        }
+
         let grData = gr.data || [];
         let eqData = eq.data || [];
 
@@ -150,6 +155,8 @@ export function AppProvider({ children }) {
             supabase.from('groups').select('*').order('created_at'),
             supabase.from('equipment').select('*').order('created_at'),
           ]);
+          // If still failing after migration attempt, fall back
+          if (gr2.error || eq2.error) throw new Error(gr2.error?.message || 'Supabase unavailable');
           grData = gr2.data || [];
           eqData = eq2.data || [];
         }
