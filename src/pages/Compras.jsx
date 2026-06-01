@@ -4,8 +4,10 @@ import {
   Plus, Search, FileDown, ChevronDown, ChevronUp, X,
   TrendingUp, DollarSign, ShoppingCart, MapPin, Trash2,
   BarChart2, Calendar, Package, Paperclip, Image, FileText, ZoomIn,
+  Sparkles, AlertTriangle,
 } from 'lucide-react';
 import { exportComprasPDF } from '../utils/pdf';
+import AIAssistant from '../components/AIAssistant';
 
 // ─── Formatters ────────────────────────────────────────────────────────────────
 function today() { return new Date().toISOString().split('T')[0]; }
@@ -24,7 +26,7 @@ const ic = 'w-full bg-[#F2F2F7] rounded-xl px-3.5 py-2.5 text-[13px] text-[#1D1D
 
 // ─── New Purchase Modal ────────────────────────────────────────────────────────
 function NewPurchaseModal({ onClose }) {
-  const { equipment, addPurchase, activeOutings } = useApp();
+  const { equipment, addPurchase, activeOutings, purchases } = useApp();
   const [date, setDate]         = useState(today());
   const [outingId, setOutingId] = useState('');
   const [location, setLocation] = useState('');
@@ -32,6 +34,30 @@ function NewPurchaseModal({ onClose }) {
   const [lines, setLines]       = useState([{ name: '', equipmentId: '', qty: 1, unitPrice: '' }]);
   const [receipt, setReceipt]   = useState(null); // { dataUrl, type, name }
   const fileRef                 = useRef();
+
+  // Detect duplicate: same equipmentId bought for same outing OR same location in last 90 days
+  function getDuplicateWarning(equipmentId) {
+    if (!equipmentId) return null;
+    const eq = equipment.find((e) => e.id === equipmentId);
+    if (!eq) return null;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const prev = purchases.filter((p) => {
+      const onDate = p.date ? new Date(p.date + 'T12:00:00') >= cutoff : false;
+      if (!onDate) return false;
+      const hasItem = (p.lines || []).some((l) => l.equipmentId === equipmentId);
+      if (!hasItem) return false;
+      if (outingId && p.outingId === outingId) return true;
+      if (location && p.location && p.location.toLowerCase() === location.toLowerCase()) return true;
+      return false;
+    });
+    if (prev.length === 0) return null;
+    const linked = activeOutings.find((o) => o.id === prev[0].outingId);
+    const where = prev[0].outingId === outingId
+      ? `este supervisor (${linked?.person || 'mesmo job'})`
+      : `este local (${prev[0].location})`;
+    return `"${eq.name}" já foi comprado ${prev.length}× nos últimos 90 dias para ${where}.`;
+  }
 
   function selectSupervisor(id) {
     setOutingId(id);
@@ -155,8 +181,11 @@ function NewPurchaseModal({ onClose }) {
             </div>
 
             <div className="space-y-2">
-              {lines.map((line, i) => (
-                <div key={i} className="grid grid-cols-[1fr_160px_60px_100px_24px] gap-2 items-center">
+              {lines.map((line, i) => {
+                const dupWarn = getDuplicateWarning(line.equipmentId);
+                return (
+                <div key={i} className="space-y-1">
+                  <div className="grid grid-cols-[1fr_160px_60px_100px_24px] gap-2 items-center">
                   <input
                     value={line.name}
                     onChange={(e) => setLine(i, 'name', e.target.value)}
@@ -167,7 +196,7 @@ function NewPurchaseModal({ onClose }) {
                   <select
                     value={line.equipmentId}
                     onChange={(e) => linkEquipment(i, e.target.value)}
-                    className={`${ic} text-[12px]`}
+                    className={`${ic} text-[12px] ${dupWarn ? 'ring-2 ring-[#FF9500]/40 border-[#FF9500]' : ''}`}
                   >
                     <option value="">— não vincular —</option>
                     {equipment.map((eq) => (
@@ -193,7 +222,15 @@ function NewPurchaseModal({ onClose }) {
                     <X size={14} />
                   </button>
                 </div>
-              ))}
+                  {dupWarn && (
+                    <div className="flex items-start gap-1.5 bg-[#FFF8EC] border border-[#FF9500]/30 rounded-xl px-3 py-2">
+                      <AlertTriangle size={12} className="text-[#FF9500] flex-shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-[#FF9500] leading-tight">{dupWarn}</p>
+                    </div>
+                  )}
+                </div>
+              );
+              })}
             </div>
 
             <button type="button" onClick={addLine}
@@ -399,6 +436,7 @@ function PurchaseRow({ purchase, onDelete, outings }) {
 export default function Compras() {
   const { purchases, deletePurchase, equipment, outings, activeOutings } = useApp();
   const [showNew, setShowNew]       = useState(false);
+  const [showAI, setShowAI]         = useState(false);
   const [search, setSearch]         = useState('');
   const [dateFrom, setDateFrom]     = useState('');
   const [dateTo, setDateTo]         = useState('');
@@ -524,6 +562,11 @@ export default function Compras() {
           onClick={() => exportComprasPDF(filtered, { search, dateFrom, dateTo })}
           className="flex items-center gap-1.5 bg-white border border-[#E5E5EA] text-[#6E6E73] px-3 py-2.5 rounded-xl text-[13px] font-medium hover:border-[#AEAEB2] transition-colors">
           <FileDown size={14} /> PDF
+        </button>
+        <button onClick={() => setShowAI(true)}
+          className="flex items-center gap-1.5 text-white px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.98]"
+          style={{background: 'linear-gradient(135deg,#5E5CE6 0%,#0071E3 100%)', boxShadow: '0 2px 8px rgba(94,92,230,0.30)'}}>
+          <Sparkles size={14} /> Analisar com IA
         </button>
         <button onClick={() => setShowNew(true)}
           className="flex items-center gap-1.5 text-white px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.98]"
@@ -659,6 +702,7 @@ export default function Compras() {
       </div>
 
       {showNew && <NewPurchaseModal onClose={() => setShowNew(false)} />}
+      {showAI  && <AIAssistant onClose={() => setShowAI(false)} />}
     </div>
   );
 }
