@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { exportComprasPDF } from '../utils/pdf';
 import AIAssistant from '../components/AIAssistant';
+import ReceiptAnalyzer from '../components/ReceiptAnalyzer';
 
 // ─── Formatters ────────────────────────────────────────────────────────────────
 function today() { return new Date().toISOString().split('T')[0]; }
@@ -33,6 +34,7 @@ function NewPurchaseModal({ onClose }) {
   const [notes, setNotes]       = useState('');
   const [lines, setLines]       = useState([{ name: '', equipmentId: '', qty: 1, unitPrice: '' }]);
   const [receipt, setReceipt]   = useState(null); // { dataUrl, type, name }
+  const [showReceiptAI, setShowReceiptAI] = useState(false);
   const fileRef                 = useRef();
 
   // Detect duplicate: same equipmentId bought for same outing OR same location in last 90 days
@@ -99,6 +101,21 @@ function NewPurchaseModal({ onClose }) {
     setLines((prev) => prev.filter((_, j) => j !== i));
   }
 
+  function applyFromAI(data) {
+    if (data.date) setDate(data.date);
+    if (data.location) setLocation(data.location);
+    if (data.notes) setNotes(data.notes);
+    if (data.receipt) setReceipt(data.receipt);
+    if (data.lines?.length) {
+      setLines(data.lines.map((l) => ({
+        name: l.name,
+        equipmentId: l.equipmentId || '',
+        qty: l.qty || 1,
+        unitPrice: String(l.unitPrice || ''),
+      })));
+    }
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
     const validLines = lines.filter((l) => l.name.trim() && Number(l.qty) > 0);
@@ -127,10 +144,24 @@ function NewPurchaseModal({ onClose }) {
         {/* Header */}
         <div className="px-6 py-5 border-b border-[#F2F2F7] flex items-center justify-between sticky top-0 bg-white z-10">
           <h2 className="text-[17px] font-semibold text-[#1D1D1F]">Nova Compra</h2>
-          <button onClick={onClose} className="w-7 h-7 bg-[#F2F2F7] hover:bg-[#E5E5EA] rounded-full flex items-center justify-center text-[#6E6E73] transition-colors">
-            <X size={14} strokeWidth={2.5} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setShowReceiptAI(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg, #5E5CE6, #0071E3)' }}>
+              <Sparkles size={12} /> Analisar Nota com IA
+            </button>
+            <button type="button" onClick={onClose} className="w-7 h-7 bg-[#F2F2F7] hover:bg-[#E5E5EA] rounded-full flex items-center justify-center text-[#6E6E73] transition-colors">
+              <X size={14} strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
+
+        {showReceiptAI && (
+          <ReceiptAnalyzer
+            onClose={() => setShowReceiptAI(false)}
+            onApply={applyFromAI}
+          />
+        )}
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
