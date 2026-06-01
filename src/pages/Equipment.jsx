@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES } from '../data/initialData';
-import { Plus, Minus, Trash2, Search, FileDown, Pencil, X, Settings, ScanLine, Package, RotateCcw, Flame } from 'lucide-react';
+import { Plus, Minus, Trash2, Search, FileDown, Pencil, X, Settings, ScanLine, Package, RotateCcw, Flame, FileSpreadsheet } from 'lucide-react';
 import { exportEquipmentPDF } from '../utils/pdf';
 import ReceiptScanner from '../components/ReceiptScanner';
+import ExcelImporter from '../components/ExcelImporter';
 
 function TypeToggle({ value, onChange }) {
   return (
@@ -478,6 +479,7 @@ export default function Equipment() {
   const [showAdd, setShowAdd] = useState(false);
   const [showGroupManager, setShowGroupManager] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showImporter, setShowImporter] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [detailTarget, setDetailTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -499,6 +501,11 @@ export default function Equipment() {
           <p className="text-[#6E6E73] text-[14px] mt-0.5">{equipment.length} itens cadastrados</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setShowImporter(true)}
+            className="flex items-center gap-2 bg-white border border-[#E5E5EA] text-[#1D1D1F] px-3.5 py-2.5 rounded-xl text-[13px] font-medium hover:bg-[#F2F2F7] transition-colors"
+            style={{boxShadow: '0 1px 2px rgba(0,0,0,0.04)'}}>
+            <FileSpreadsheet size={15} /> Importar Excel
+          </button>
           <button onClick={() => setShowScanner(true)}
             className="flex items-center gap-2 bg-white border border-[#E5E5EA] text-[#1D1D1F] px-3.5 py-2.5 rounded-xl text-[13px] font-medium hover:bg-[#F2F2F7] transition-colors"
             style={{boxShadow: '0 1px 2px rgba(0,0,0,0.04)'}}>
@@ -584,6 +591,7 @@ export default function Equipment() {
       {editTarget    && <EditModal item={editTarget} onClose={() => setEditTarget(null)} onDelete={setDeleteTarget} currentUser={currentUser} />}
       {showGroupManager && <GroupManager onClose={() => setShowGroupManager(false)} />}
       {showScanner   && <ReceiptScanner onClose={() => setShowScanner(false)} />}
+      {showImporter  && <ExcelImporter onClose={() => setShowImporter(false)} />}
       {detailItem    && <DetailModal item={detailItem} onClose={() => setDetailTarget(null)} onEdit={setEditTarget} adjustStock={adjustStock} />}
       {deleteTarget  && <DeleteConfirm item={deleteTarget} onConfirm={() => { deleteEquipment(deleteTarget.id); setDeleteTarget(null); }} onClose={() => setDeleteTarget(null)} />}
     </div>
